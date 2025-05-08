@@ -1,39 +1,32 @@
-import OpenAI from 'openai';
-import {CONFIG} from '../config';
+import OpenAI, { toFile } from 'openai';
+import { CONFIG } from '../config';
 import logger from '../logger';
-import {AIConfig} from '../interfaces/ai-interfaces';
 import Roboto from '../roboto';
-import {BotInput} from '../interfaces/discord-interfaces';
-import {Stream} from "openai/streaming";
-import {ResponseInput, Tool} from "openai/src/resources/responses/responses";
+import { BotInput } from '../interfaces/discord-interfaces';
+import { ResponseInput, Tool } from "openai/src/resources/responses/responses";
 
 export class OpenAIService {
   private openAI: OpenAI;
 
   constructor() {
-    const config: AIConfig = CONFIG.AIParams.OPENAI;
     this.openAI = new OpenAI({
-      apiKey: config.apiKey
+      apiKey: CONFIG.OPENAI.apiKey
     });
   }
 
   async sendChatWithTools(
-    messageList: ResponseInput,
-    responseType: any = 'text',
-    inputData: BotInput,
-    tools: Array<Tool>
+      messageList: ResponseInput,
+      responseType: any = 'text',
+      inputData: BotInput,
+      tools: Array<Tool>
   ): Promise<string> {
     logger.info(`[OpenAI] Sending ${messageList.length} messages`);
     logger.debug(`[OpenAI] Sending Msg: ${JSON.stringify(messageList[messageList.length - 1])}`);
 
     const responseResult = await this.openAI.responses.create({
-      model: CONFIG.AIParams.OPENAI.chatModel,
+      model: CONFIG.OPENAI.chatModel,
       input: messageList,
-      text: {
-        format: {
-          type: responseType
-        }
-      },
+      text: { format: { type: responseType } },
       reasoning: {},
       tools: tools,
       temperature: 1,
@@ -44,23 +37,18 @@ export class OpenAIService {
 
     logger.debug('[OpenAI] Completion Response:' + JSON.stringify(responseResult.output_text));
 
-    const messageResult = responseResult.output_text;
-
     const functionCalls = responseResult.output.filter(toolCall => toolCall.type === "function_call");
-    if (functionCalls.length === 0)
-      return messageResult;
+    if (functionCalls.length === 0) return responseResult.output_text;
 
-    let updatedMessages: ResponseInput = [...messageList as any];
+    const updatedMessages: ResponseInput = [...messageList as any];
 
-    for (const toolCall of responseResult.output) {
-      if (toolCall.type !== "function_call") {
-        continue;
-      }
-
+    for (const toolCall of functionCalls) {
       updatedMessages.push(toolCall);
 
       const name = toolCall.name;
       const args = JSON.parse(toolCall.arguments);
+
+      logger.debug(`[OpenAI] Called function "${name}".`);
 
       try {
         const result = await Roboto.executeFunctions(name, args, inputData);
@@ -69,8 +57,8 @@ export class OpenAIService {
           call_id: toolCall.call_id,
           output: result.toString()
         });
-      }catch (error) {
-        logger.error(`Error executing function ${name}:`, error);
+      } catch (error) {
+        logger.error(`[OpenAI] Error executing function ${name}:`, error);
         updatedMessages.push({
           type: "function_call_output",
           call_id: toolCall.call_id,
@@ -79,49 +67,171 @@ export class OpenAIService {
       }
     }
 
-    // Recursive call with updated messages
     return this.sendChatWithTools(updatedMessages, responseType, inputData, tools);
   }
 
-  /**
-   * Generates speech audio from provided text by utilizing OpenAI's Text-to-Speech (TTS) API.
-   * This function translates text into spoken words in an audio format. It offers a way to convert written messages into audio, providing an audible version of the text content.
-   * If a specific voice model is specified in the configuration, the generated speech will use that voice.
-   *
-   * Parameters:
-   * - message: A string containing the text to be converted into speech. This text serves as the input for the TTS engine.
-   *
-   * Returns:
-   * - A promise that resolves to a buffer containing the audio data in MP3 format. This buffer can be played back or sent as an audio message.
-   */
-  async speech(message, responseFormat?) {
+  //This function is used to prevent the bug that occurs when trying to use the built-in OpenAI tool together with many other functions
+  async webSearch(searchQuery: string){
 
-    logger.debug(`[OpenAI->speech] Creating speech audio for: "${message}"`);
+    logger.info(`[OpenAI->webSearch] Searching "${searchQuery}"`);
 
-    const response: any = await this.openAI.audio.speech.create({
-      model: CONFIG.AIParams.OPENAI.speechModel,
-      voice: CONFIG.AIParams.OPENAI.speechVoice as any,
-      input: message,
-      response_format: responseFormat || 'mp3'
+    const responseResult = await this.openAI.responses.create({
+      model: 'gpt-4.1-mini',
+      input: [{
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: searchQuery
+          }
+        ]
+      }],
+      text: { format: { type: 'text' } },
+      reasoning: {},
+      tools: [
+        {
+          type: "web_search_preview",
+          user_location: {
+            type: "approximate"
+          },
+          search_context_size: "medium"
+        }
+      ],
+      temperature: 1,
+      max_output_tokens: 2048,
+      top_p: 1,
+      store: true
     });
 
-    logger.debug(`[OpenAI->speech] Audio Creation OK`);
-
-    return Buffer.from(await response.arrayBuffer());
+    return responseResult.output_text;
   }
 
-  async speechStream(message: string, responseFormat: 'mp3' | 'opus' | 'aac' | 'flac' = 'mp3') {
-    logger.debug(`[OpenAI->speechStream] Creating streamed speech audio for: "${message}"`);
+  /**
+   * Generates one or more images from a text prompt using the configured image model.
+   *
+   * @param prompt    The textual description to guide image generation.
+   * @param options   Optional parameters:
+   *                   - n: number of images to generate (default 1)
+   *                   - size: dimensions, e.g. "1024x1024" (default)
+   *                   - quality: "low"|"medium"|"high"|"auto"
+   *                   - background: "opaque"|"transparent"|"auto"
+   * @returns         A Promise resolving to an array of generated image objects (URLs or base64 data).
+   */
+  async createImage(
+      prompt: string,
+      options?: {
+        n?: number;
+        size?: "1024x1024" | "1536x1024" | "1024x1536" | "auto";
+        quality?: "low" | "medium" | "high" | "auto";
+        background?: "opaque" | "transparent" | "auto";
+        output_format: 'png' | 'jpeg' | 'webp'
+      },
+  ) {
+    logger.debug(`[OpenAI->createImage] Prompt: "${prompt}"`);
 
+    const params: OpenAI.Images.ImageGenerateParams = {
+      model: CONFIG.OPENAI.imageModel,
+      prompt,
+      n: options?.n ?? 1,
+      size: options?.size ?? "1536x1024",
+      quality: options?.quality ?? "low",
+      background: options?.background ?? "auto",
+      output_format: options?.output_format ?? "jpeg",
+      moderation: 'low'
+    };
+
+    const response = await this.openAI.images.generate(params);
+    logger.debug(`[OpenAI->createImage] Image generated`);
+
+    return response.data;
+  }
+
+
+  /**
+   * Edits or composes one or more existing images using a text prompt and optional mask.
+   *
+   * @param imageStreams  Array of image streams or blobs to be edited.
+   * @param prompt        Text description of desired edits or composition.
+   * @param maskStream    Optional stream or blob containing an alpha-mask to apply to the first image.
+   * @param options       Optional parameters:
+   *                       - n: number of output images (default 1)
+   *                       - size: output dimensions (default "1024x1024")
+   *                       - quality: "low"|"medium"|"high"|"auto"
+   *                       - background: "opaque"|"transparent"|"auto"
+   * @returns             A Promise resolving to an array of edited image objects.
+   */
+  async editImage(
+      imageStreams: Array<NodeJS.ReadableStream | Blob>,
+      prompt: string,
+      maskStream?: NodeJS.ReadableStream | Blob,
+      options?: {
+        n?: number;
+        size?: "1024x1024" | "1536x1024" | "1024x1536" | "auto";
+        quality?: "low" | "medium" | "high" | "auto";
+        background?: "opaque" | "transparent" | "auto";
+        output_format: 'png' | 'jpeg' | 'webp'
+      }
+  ) {
+    logger.debug(`[OpenAI->editImage] Prompt: "${prompt}"`);
+
+    // Convert each input stream/blob into File objects
+    const imageFiles = await Promise.all(
+        imageStreams.map((stream, idx) =>
+            toFile(stream, `image_${idx}.png`, { type: "image/png" })
+        )
+    );
+
+    // Si nos pasan máscara, la convertimos (se aplicará a imageFiles[0])
+    let maskFile;
+    if (maskStream) {
+      maskFile = await toFile(maskStream, "mask.png", { type: "image/png" });
+    }
+
+    // Armamos los parámetros para la llamada
+    const params: any = {
+      model: CONFIG.OPENAI.imageModel,
+      image: imageFiles,
+      prompt,
+      n: options?.n ?? 1,
+      size: options?.size ?? "1024x1024",
+      quality: options?.quality ?? "low",
+      background: options?.background ?? "auto",
+      output_format: options?.output_format ?? 'jpeg',
+      moderation: 'low'
+    };
+
+    if (maskFile) {
+      params.mask = maskFile;
+    }
+
+    // Llamada a la API
+    const response = await this.openAI.images.edit(params);
+
+    logger.debug(`[OpenAI->editImage] Image(s) edited`);
+
+    return response.data;
+  }
+
+  async speechStream(
+      message: string,
+      instructions?: string,
+      voice?: string,
+      responseFormat: 'mp3' | 'opus' | 'aac' | 'flac' = 'opus'
+  ): Promise<import('stream').Readable> {
+    logger.debug(`[OpenAI->speech] Creating streamed speech audio for: "${message}". Voice: "${voice}". Instructions: "${instructions}".`);
     const response = await this.openAI.audio.speech.create({
-      model: CONFIG.AIParams.OPENAI.speechModel,
-      voice: CONFIG.AIParams.OPENAI.speechVoice as any,
+      model: CONFIG.OPENAI.speechModel,
+      instructions: instructions,
+      voice: voice?.toLowerCase() ?? CONFIG.OPENAI.speechVoice as any,
       input: message,
       response_format: responseFormat,
-    }, { stream: true });
+    });
 
-    logger.debug(`[OpenAI->speechStream] Stream ready`);
-    return response as any as Stream<any>;
+    if (!response.body) {
+      throw new Error('OpenAI audio.speech.create returned no body');
+    }
+
+    return response.body as any;
   }
 
 

@@ -14,6 +14,7 @@ export interface AIContent {
   value?: string;
   type: 'text' | 'image';
   media_type?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | 'image/url' |string;
+  image_id?: string;
 }
 
 

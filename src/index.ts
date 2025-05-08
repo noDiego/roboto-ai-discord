@@ -1,9 +1,9 @@
 import { Client, GatewayIntentBits } from "discord.js";
 import { deployCommands } from './deploy-commands';
-import { commands } from './commands';
 import { CONFIG } from './config';
 import logger from './logger';
 import Roboto from './roboto';
+import { handleInteractionError } from "./utils";
 
 const client = new Client({
   intents: [  GatewayIntentBits.Guilds,
@@ -23,7 +23,11 @@ client.on("guildCreate", async (guild) => {
 });
 
 client.on("interactionCreate", async (interaction) => {
-  return await Roboto.handleInteraction(interaction);
+  try {
+    return await Roboto.handleInteraction(interaction);
+  }catch (e){
+    return handleInteractionError(interaction, e);
+  }
 });
 
 client.on('messageCreate', async (message) => {

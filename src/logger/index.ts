@@ -1,4 +1,4 @@
-import *  as  winston from 'winston';
+import * as winston from 'winston';
 import 'winston-daily-rotate-file';
 
 const dailyRotateFile = new (winston.transports.DailyRotateFile)({

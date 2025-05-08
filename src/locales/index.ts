@@ -33,27 +33,39 @@ class LocalizationService {
     let translation: any = translations[this.currentLocale];
 
     for (const key of keys) {
-      if (translation[key] === undefined) {
-        console.warn(`Translation key '${path}' not found in locale '${this.currentLocale}'`);
-        // Intentar con el idioma por defecto
+      if (translation != null && translation[key] !== undefined) {
+        translation = translation[key];
+      }
+      else {
         translation = translations['en'];
-        for (const fallbackKey of keys) {
-          if (translation[fallbackKey] === undefined) {
-            return path; // Si tampoco existe en el idioma por defecto, devolver la ruta
+        for (const k of keys) {
+          if (translation != null && translation[k] !== undefined) {
+            translation = translation[k];
+          } else {
+            return path;
           }
-          translation = translation[fallbackKey];
         }
         break;
       }
-      translation = translation[key];
     }
 
     if (typeof translation !== 'string') {
       return path;
     }
 
-    return translation.replace(/\{(\d+)\}/g, (match, index) => {
-      return args[parseInt(index)] !== undefined ? String(args[parseInt(index)]) : match;
+    if (args.length === 1 && args[0] !== null
+        && typeof args[0] === 'object'
+        && !Array.isArray(args[0])) {
+      const map = args[0] as Record<string, any>;
+      return translation.replace(/\{\{([^}]+)\}\}/g, (_, prop) => {
+        const val = map[prop];
+        return val !== undefined ? String(val) : '';
+      });
+    }
+
+    return translation.replace(/\{(\d+)\}/g, (_, idx) => {
+      const i = parseInt(idx, 10);
+      return args[i] !== undefined ? String(args[i]) : '';
     });
   }
 

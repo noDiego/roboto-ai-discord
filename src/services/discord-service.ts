@@ -1,5 +1,6 @@
-import {Guild, GuildMember} from 'discord.js';
+import { Guild, GuildMember } from 'discord.js';
 import {
+  AudioPlayer,
   createAudioPlayer,
   createAudioResource,
   DiscordGatewayAdapterCreator,
@@ -11,8 +12,9 @@ import {
   VoiceConnectionStatus
 } from '@discordjs/voice';
 import logger from '../logger';
-import {GuildPlayer} from '../interfaces/guild-data';
-import {BotInput} from '../interfaces/discord-interfaces';
+import { GuildPlayer } from '../interfaces/guild-data';
+import { BotInput } from '../interfaces/discord-interfaces';
+import { Readable } from "stream";
 
 export class DiscordService {
 
@@ -25,11 +27,18 @@ export class DiscordService {
     logger.info('DiscordService iniciado correctamente.');
   }
 
-  async playAudio(input: BotInput, stream: any, type?: StreamType): Promise<void> {
-    const audioPlayer = await this.getAudioPlayer(input);
-    const resource = createAudioResource(stream, {
-      inputType: type ?? stream?.type
+  async playAudio(input: BotInput, stream: any, type?: StreamType, customAudioPlayer?: AudioPlayer): Promise<void> {
+    const audioPlayer = customAudioPlayer || await this.getAudioPlayer(input);
+
+    let nodeStream = stream;
+    if (stream && typeof stream.getReader === 'function') {
+      nodeStream = Readable.fromWeb(stream);
+    }
+
+    const resource = createAudioResource(nodeStream, {
+      inputType: type ?? stream?.type ?? nodeStream.type
     });
+
     audioPlayer.play(resource);
   }
 
@@ -70,7 +79,7 @@ export class DiscordService {
     return guildPlayer;
   }
 
-  private async getGuildVoiceConnection(input: BotInput): Promise<VoiceConnection> {
+  public async getGuildVoiceConnection(input: BotInput): Promise<VoiceConnection> {
     const guild: Guild | null = input.guild;
     if (!guild) {
       throw new Error('No se pudo identificar el servidor.');

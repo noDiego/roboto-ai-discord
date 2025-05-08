@@ -1,27 +1,29 @@
-import {Collection, CommandInteraction, Message, Snowflake, TextBasedChannel} from 'discord.js';
-import {CONFIG} from './config';
-import {AIAnswer, AIContent, AiMessage, AIProvider, AIRole} from './interfaces/ai-interfaces';
+import { Collection, CommandInteraction, Message, Snowflake, TextBasedChannel } from 'discord.js';
+import { CONFIG, generateAIPrompt } from './config';
+import { AIAnswer, AIContent, AiMessage, AIProvider, AIRole } from './interfaces/ai-interfaces';
 import Roboto from './roboto';
-import {AITools} from './services/functions';
-import {BotInput} from './interfaces/discord-interfaces';
-import {extractJSON, getUnsupportedMessage, getUserName} from './utils';
-import {ResponseInput} from "openai/src/resources/responses/responses";
+import { AITools } from './services/functions';
+import { BotInput } from './interfaces/discord-interfaces';
+import { extractJSON, getUnsupportedMessage, getUserName } from './utils';
+import { ResponseInput } from "openai/src/resources/responses/responses";
+import { GuildData } from "./interfaces/guild-data";
 
-export async function msgToAI(inputData: CommandInteraction | Message<boolean>): Promise<AIAnswer> {
+export async function msgToAI(inputData: CommandInteraction | Message<boolean>, guildData: GuildData, commandMessage?: string): Promise<AIAnswer> {
 
   // Build the message array to send to AI
-  const messageList = await buildMessageArray(inputData);
+  const messageList = await buildMessageArray(inputData, guildData, commandMessage);
 
   // Convert messages to OPENAI format
-  const convertedMsgList = convertIaMessagesLang(messageList, AIProvider.OPENAI, CONFIG.AIConfig.prompt);
+  const convertedMsgList = convertIaMessagesLang(messageList, AIProvider.OPENAI, generateAIPrompt(guildData.guildConfig));
 
   // Send message to OPENAI and return response
   const answerJSON = await Roboto.openAI.sendChatWithTools(convertedMsgList, 'text', inputData, AITools);
+  if(!answerJSON) return null;
 
   return extractJSON(answerJSON) as AIAnswer;
 }
 
-async function buildMessageArray(inputData: BotInput): Promise<AiMessage[]>{
+async function buildMessageArray(inputData: BotInput, guildData: GuildData, commandMessage?: string): Promise<AiMessage[]>{
 
   const resetCommands: string[] = ["-reset", "-r", "/reset"];
 
@@ -30,7 +32,7 @@ async function buildMessageArray(inputData: BotInput): Promise<AiMessage[]>{
 
   /**Get list of messages in channel **/
   const channel : TextBasedChannel = inputData.channel as TextBasedChannel;
-  const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: CONFIG.AIConfig.maxMsgs}) as Collection<Snowflake, Message<boolean>>;
+  const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: guildData.guildConfig.maxMessages}) as Collection<Snowflake, Message<boolean>>;
   let channelMessages = Array.from(channelMessagesCollection.values()).reverse();
 
   /**Consider only messages after -reset command**/
@@ -48,11 +50,11 @@ async function buildMessageArray(inputData: BotInput): Promise<AiMessage[]>{
 
     if((channelMsg.content == '') && !isImage) continue;
 
-    const rol = channelMsg.author.bot ? AIRole.ASSISTANT : AIRole.USER;
+    const rol = (!channelMsg.author.bot || isImage) ? AIRole.USER : AIRole.ASSISTANT;
     const name = getUserName(channelMsg);
 
     const content: Array<AIContent> = [];
-    if(isImage) content.push({type: 'image',  value: attachment.url, media_type: <string> attachment.contentType});
+    if(isImage) content.push({type: 'image',  value: attachment.url, media_type: <string> attachment.contentType, image_id: channelMsg.id});
     if(channelMsg.content.length > 0) content.push({ type: 'text', value: channelMsg.content });
     if(content.length == 0) continue;
 
@@ -62,6 +64,10 @@ async function buildMessageArray(inputData: BotInput): Promise<AiMessage[]>{
   messageList = messageList.reverse();
 
   if (messageList.length > 1 && messageList[messageList.length - 1].role === AIRole.ASSISTANT) messageList.pop();
+
+  if (commandMessage){
+    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage }], name: getUserName(inputData)});
+  }
 
   return messageList;
 }
@@ -75,8 +81,20 @@ function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, syste
         msg.content.forEach(c => {
           const msgContent = c.value?.replace(`<@${CONFIG.botClientID}>`,CONFIG.botName);
           const fromBot = msg.role == AIRole.ASSISTANT;
-          if (['text', 'audio'].includes(c.type))  gptContent.push({ type: fromBot?'output_text':'input_text', text: JSON.stringify({message: msgContent, author: msg.name, type: c.type, response_format:'json_object'}) });
-          if (['image'].includes(c.type))          gptContent.push({ type: 'input_image', image_url: c.value });
+          if (['text', 'audio'].includes(c.type))  gptContent.push({
+            type: fromBot?'output_text':'input_text',
+            text: JSON.stringify({message: msgContent, author: msg.name, type: c.type, imageId: c.image_id, response_format:'json_object'}) });
+          if (['image'].includes(c.type)){
+            gptContent.push({ type: 'input_image', image_url: c.value });
+            gptContent.push({
+              type: fromBot ? 'output_text' : 'input_text',
+              text: JSON.stringify({
+                image_id: c.image_id,
+                author: msg.name,
+                note: 'refer to this image by its image_id'
+              })
+            });
+          }
         })
         chatgptMessageList.push({content: gptContent, role: msg.role});
       })
@@ -84,8 +102,7 @@ function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, syste
       chatgptMessageList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
       return chatgptMessageList;
 
-    case AIProvider.DEEPINFRA:
-
+    case AIProvider.DEEPINFRA: //Unused
       const otherMsgList: ResponseInput = [];
       messageList.forEach(msg => {
         const fromBot = msg.role == AIRole.ASSISTANT;

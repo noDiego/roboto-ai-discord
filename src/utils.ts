@@ -1,10 +1,25 @@
-import {ActionRowBuilder, ButtonBuilder, ButtonStyle, GuildTextBasedChannel, Message} from 'discord.js';
-import {MusicAction} from './interfaces/discord-interfaces';
-import {CONFIG} from "./config";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, GuildTextBasedChannel, Interaction, Message } from 'discord.js';
+import { BotInput, MusicAction } from './interfaces/discord-interfaces';
+import { CONFIG } from "./config";
 import logger from "./logger";
+import i18n from "./locales";
+import * as https from "node:https";
+import { Readable } from "stream";
 
-export function getUserName(msg: Message<boolean>){
-  return msg.member.nickname ?? msg.member.displayName ?? msg.author.displayName ?? msg.author.globalName ?? msg.author.username;
+export function getUserName(msg: BotInput): string | null {
+  if (msg instanceof Message) {
+    return msg.member?.nickname ||
+        msg.member?.displayName ||
+        msg.author?.displayName ||
+        msg.author?.globalName ||
+        msg.author?.username ||
+        null;
+  }
+
+  return msg.user?.displayName ||
+      msg.user?.globalName ||
+      msg.member?.user?.username ||
+      null;
 }
 
 export function getMusicButtons(paused = false) {
@@ -199,6 +214,7 @@ export function extractJSON(inputString: string) {
 
     return JSON.parse(jsonString);
   } catch (e) {
+    logger.warn('There was an error trying to read the response message in the expected format. Returning the complete message.')
     return {message: inputString, author: CONFIG.botName, type: 'text'};
   }
 }
@@ -212,4 +228,42 @@ export function musicControlAction(action: string): MusicAction{
     case "STOP": return MusicAction.STOP;
     case "SKIP": return MusicAction.SKIP;
   }
+}
+
+export function handleInteractionError(interaction: Interaction, e: any){
+  logger.error(`Error processing interaction : ${e.message}`)
+  if(interaction.isRepliable()) return interaction.reply({content: i18n.t('responses.error'), ephemeral: true});
+  return;
+}
+
+export function temporalMsg(message: Message, seconds = 15){
+  setTimeout(()=> message.delete(), seconds * 1000);
+}
+
+export function imageToBase64(url): Promise<string> {
+  return new Promise((resolve, reject) => {
+    https.get(url, (response) => {
+      let data = [];
+
+      response.on('data', (chunk) => {
+        data.push(chunk);
+      });
+
+      response.on('end', () => {
+        const buffer = Buffer.concat(data);
+        const base64String = buffer.toString('base64');
+        resolve(base64String);
+      });
+
+    }).on('error', (err) => {
+      reject(err);
+    });
+  });
+}
+
+export function bufferToStream(buffer) {
+  const stream = new Readable();
+  stream.push(buffer);
+  stream.push(null);
+  return stream;
 }

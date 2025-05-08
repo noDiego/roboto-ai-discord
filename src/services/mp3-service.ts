@@ -1,12 +1,12 @@
-import {MusicProvider, SongInfo} from "../interfaces/guild-data";
+import { MusicProvider, SongInfo } from "../interfaces/guild-data";
 import path from "node:path";
 import logger from "../logger";
 import * as fs from "node:fs";
-import {readFileSync} from "fs";
-import {Readable} from "stream";
+import { readFileSync } from "fs";
+import { Readable } from "stream";
 import Roboto from "../roboto";
-import {BotInput} from "../interfaces/discord-interfaces";
-import {ActionResult} from "../interfaces/action-result";
+import { BotInput } from "../interfaces/discord-interfaces";
+import { ActionResult } from "../interfaces/action-result";
 
 const mp3Folder = __dirname + "/../../assets/mp3/";
 

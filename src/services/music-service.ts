@@ -3,10 +3,11 @@ import { GuildData, MusicProvider, SongInfo } from '../interfaces/guild-data';
 import YoutubeService from './youtube-service';
 import { ActionResult } from '../interfaces/action-result';
 import Roboto from '../roboto';
-import { CommandInteraction, EmbedBuilder, GuildTextBasedChannel, Interaction } from 'discord.js';
-import { getMusicButtons } from '../utils';
+import { EmbedBuilder, GuildTextBasedChannel } from 'discord.js';
+import { getMusicButtons, getUserName, temporalMsg } from '../utils';
 import logger from '../logger';
-import {searchMP3, startMP3Playback} from "./mp3-service";
+import { searchMP3, startMP3Playback } from "./mp3-service";
+import i18n from "../locales";
 
 
 export class MusicService {
@@ -17,11 +18,8 @@ export class MusicService {
     this.youtubeService = new YoutubeService();
   }
 
-  async search(input: BotInput, query: string, provider: MusicProvider): Promise<ActionResult<SongInfo[]>>{
+  async search(query: string, provider: MusicProvider): Promise<ActionResult<SongInfo[]>>{
 
-    const guildData: GuildData = Roboto.getGuildData(input.guildId!);
-    const audioPlayer = await Roboto.discordService.getAudioPlayer(input);
-    const channel = input.channel as GuildTextBasedChannel;
     let results: SongInfo[] = [];
 
     switch (provider) {
@@ -32,29 +30,35 @@ export class MusicService {
         results = searchMP3(query);
         break;
     }
-
     if (results.length === 0) return {success: false, code: 2, resultMsg: 'No results'};
+    return { success: true, result: results, code: 0 };
+  }
 
-    guildData.songsQueue.push(...results);
+  async addToQueue(input: BotInput, songs: SongInfo[]): Promise<ActionResult>{
+    const guildData: GuildData = Roboto.getGuildData(input.guildId!);
+    const audioPlayer = await Roboto.discordService.getAudioPlayer(input);
+    const channel = input.channel as GuildTextBasedChannel;
+
+    guildData.songsQueue.push(...songs);
     const actualStatus = audioPlayer.state.status;
 
-    if(results.length >= 1 && (actualStatus == 'playing' || guildData.songsQueue.length > 1)) {
-      const msgEmbd = results.length == 1 ? new EmbedBuilder()
-          .setColor(0x0099FF)
-          .setTitle(results[0].title)
-          .setURL(results[0].url)
-          .setAuthor({name: `Adding song to the list`, url: results[0].url})
-          .setThumbnail(results[0].thumbnail) :
-        new EmbedBuilder()
-          .setColor(0x0099FF)
-          .setAuthor({name: 'Adding '+results.length+' songs to the list.'})
-          .setThumbnail(results[0].thumbnail);
+    if(songs.length >= 1 && (actualStatus == 'playing' || guildData.songsQueue.length > 1)) {
+      const msgEmbd = songs.length == 1 ? new EmbedBuilder()
+              .setColor(0x0099FF)
+              .setTitle(songs[0].title)
+              .setURL(songs[0].url)
+              .setAuthor({name: `Adding song to the list`, url: songs[0].url})
+              .setThumbnail(songs[0].thumbnail) :
+          new EmbedBuilder()
+              .setColor(0x0099FF)
+              .setAuthor({name: 'Adding '+songs.length+' songs to the list.'})
+              .setThumbnail(songs[0].thumbnail);
 
       channel.send({embeds: [msgEmbd]});
-      return { success: true, result: results, code: 10 };
+      return { success: true, result: songs, code: actualStatus == 'playing'? 10 : 11 };
     }
 
-    return { success: true, result: results, code: 0 };
+    return { success: true, result: songs, code: 0 };
   }
 
   async startPlayback(input: BotInput){
@@ -119,22 +123,28 @@ export class MusicService {
     }
   }
 
-  public async musicButtonHandle(input: BotInput, action: MusicAction) {
+  public async musicButtonHandle(input: BotInput, action: MusicAction): Promise<boolean> {
 
     try {
       const guildData = Roboto.getGuildData(input.guildId!);
+      const guildChannel = input.channel as GuildTextBasedChannel;
       const audioPlayer = await Roboto.discordService.getAudioPlayer(input);
 
       switch (action) {
         case MusicAction.STOP:
+          temporalMsg(await guildChannel.send(i18n.t("commands.stop.response", { name: getUserName(input)})));
           guildData.songsQueue.length = 0;
+          return audioPlayer.stop(true);
         case MusicAction.SKIP:
+          temporalMsg(await guildChannel.send(i18n.t("commands.skip.response", { name: getUserName(input), title: guildData.currentSongInfo.title})));
           return audioPlayer.stop(true);
         case MusicAction.PAUSE:
           if (guildData.currentMusicMsg) await guildData.currentMusicMsg.edit({components: [getMusicButtons(true) as any]});
+          temporalMsg(await guildChannel.send(i18n.t("commands.pause.response", { name: getUserName(input), title: guildData.currentSongInfo.title})));
           return audioPlayer.pause();
         case MusicAction.RESUME:
           if (guildData.currentMusicMsg) await guildData.currentMusicMsg.edit({components: [getMusicButtons(false) as any]});
+          temporalMsg(await guildChannel.send(i18n.t("commands.resume.response", { name: getUserName(input), title: guildData.currentSongInfo.title})));
           return audioPlayer.unpause();
         default:
           return false;

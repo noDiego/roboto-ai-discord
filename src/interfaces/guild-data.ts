@@ -1,10 +1,12 @@
 import { Message } from 'discord.js';
 import { AudioPlayer } from '@discordjs/voice';
+import { GuildConfiguration } from "../config/guild-configurations";
 
 export interface GuildData {
   guildId: string;
   songsQueue: SongInfo[];
   isBusy: boolean;
+  guildConfig: GuildConfiguration;
   currentSongInfo?: SongInfo;
   currentMusicMsg?: Message<boolean>;
 }
@@ -21,21 +23,6 @@ export enum MusicProvider{
   YOUTUBE = 'YOUTUBE',
   SOUNDCLOUD = 'SOUNDCLOUD',
   MP3 = 'MP3'
-}
-
-export interface GuildMessage{
-  responseMessageId?: string;
-  isImage: boolean;
-  content: string;
-  author: {
-    bot: boolean;
-    globalName?: string;
-  };
-  attachments?:{
-    url: string;
-    contentType: string;
-  }
-  createdTimestamp: number;
 }
 
 export interface GuildPlayer{
