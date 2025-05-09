@@ -6,6 +6,6 @@
 logs
 .env
 youtube-api-key*
-assets
+assets/*
 *.iml
-tempº
+temp/*
