@@ -13,6 +13,7 @@ export default {
         play: "Lecture",
         stop: "Arrêter",
         skip: "Passer",
+        listeningMsg: 'Écoutant'
     },
     commands: {
         image: {

@@ -12,7 +12,8 @@ export default {
     pause: "Pausar",
     play: "Reproducir",
     stop: "Detener",
-    skip: "Saltar"
+    skip: "Saltar",
+    listeningMsg: 'Escuchando'
   },
   commands: {
     image:{

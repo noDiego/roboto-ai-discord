@@ -238,5 +238,36 @@ This function always requires at least one reference image as input, and must no
             additionalProperties: false
         },
         strict: true
+    },
+    {
+        type: "function",
+        name: "get_corvo_songs_details",
+        description: `Obtiene un listado completo de las canciones de Corvo con sus respectivas descripciones. Si se proporciona un parámetro de búsqueda, filtra y retorna únicamente las canciones que coincidan con el título o descripcion especificado`,
+        parameters: {
+            type: "object",
+            properties: {
+                query_cs: { type: ["string","null"], description: "Parte del título de la o las canciones para filtrar los resultados (Opcional)" },
+            },
+            required: ["query_cs"],
+            additionalProperties: false
+        },
+        strict: true
+    },
+    {
+        type: "function",
+        name: "play_corvo_song",
+        description: "Reproduce o agrega a la cola una canción específica de Corvo. Si envias \"*\" se reproduciran todas las canciones",
+        parameters: {
+            type: "object",
+            properties: {
+                title: {
+                    type: "string",
+                    description: `El título de la canción de Corvo a reproducir. Si envias "*" se reproduciran todas las canciones`
+                }
+            },
+            required: ["title"],
+            additionalProperties: false,
+        },
+        strict: true
     }
 ];

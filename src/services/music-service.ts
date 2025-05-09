@@ -8,6 +8,7 @@ import { getMusicButtons, getUserName, temporalMsg } from '../utils';
 import logger from '../logger';
 import { searchMP3, startMP3Playback } from "./mp3-service";
 import i18n from "../locales";
+import { CorvoService } from "./corvo-service";
 
 
 export class MusicService {
@@ -28,6 +29,9 @@ export class MusicService {
         break;
       case 'MP3':
         results = searchMP3(query);
+        break;
+      case 'CORVO':
+        results = CorvoService.searchCorvoSong(query);
         break;
     }
     if (results.length === 0) return {success: false, code: 2, resultMsg: 'No results'};
@@ -76,7 +80,9 @@ export class MusicService {
       case MusicProvider.MP3:
         result = await startMP3Playback(input, song);
         break;
-      case MusicProvider.SOUNDCLOUD:
+      case MusicProvider.CORVO:
+        result = await CorvoService.startCorvoPlayback(input, song);
+        break;
     }
 
     if(!result.success) return result;
@@ -99,7 +105,7 @@ export class MusicService {
       .setColor(0x0099FF)
       .setTitle(song.title)
       .setURL(song.url)
-      .setAuthor({name: 'Listening: ', url: song.url})
+      .setAuthor({name: `${i18n.t('listeningMsg')}: `, url: song.url})
       .setThumbnail(song.thumbnail);
 
     const buttonsRow = getMusicButtons();
