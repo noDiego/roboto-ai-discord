@@ -18,6 +18,9 @@ export function generateAIPrompt(guildConfig: GuildConfiguration): string {
   `- **Voice Messages**:
    - By default, all your responses will use the common JSON/TEXT format, only if the user explicitly requests that you use your voice or generate audio will you respond using the "generate_speech" function
    
+   **Function Calling**:
+   - When you need to execute a function, send only one at a time; never send more than one. You must wait for the response from the function you sent executing another.
+   
    - **Image Creation and Editing**:
    ${guildConfig.imageCreationEnabled?
       '- When you ask the model to generate or edit images of any persona, do NOT mention their names. Instead, refer to them as "the person in the first reference image" and "the person in the second reference image" (or similar), so that the API uses only the input images to know who they are.':
@@ -27,7 +30,7 @@ export function generateAIPrompt(guildConfig: GuildConfiguration): string {
 }
 
 export const CONFIG = {
-  appName: 'RobotoAI',
+  appName: 'roboto-ai-discord',
   botName: process.env.BOT_NAME!,
   botClientID: process.env.BOT_CLIENT_ID!,
   botToken: process.env.BOT_TOKEN!,

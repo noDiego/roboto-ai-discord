@@ -47,17 +47,19 @@ export class MusicService {
               .setColor(0x0099FF)
               .setTitle(songs[0].title)
               .setURL(songs[0].url)
-              .setAuthor({name: `Adding song to the list`, url: songs[0].url})
+              .setAuthor({name: i18n.t('musicplayer.authorAddingOne'), url: songs[0].url})
               .setThumbnail(songs[0].thumbnail) :
           new EmbedBuilder()
               .setColor(0x0099FF)
-              .setAuthor({name: 'Adding '+songs.length+' songs to the list.'})
+              .setAuthor({name: i18n.t('musicplayer.authorAddingMany', {count: songs.length})})
               .setThumbnail(songs[0].thumbnail);
 
       channel.send({embeds: [msgEmbd]});
+      logger.debug(`Added ${songs.length} songs. Player Status:"${actualStatus}"`)
       return { success: true, result: songs, code: actualStatus == 'playing'? 10 : 11 };
     }
 
+    logger.debug(`Added 1 song. Player Status:"${actualStatus}"`)
     return { success: true, result: songs, code: 0 };
   }
 
@@ -99,7 +101,7 @@ export class MusicService {
       .setColor(0x0099FF)
       .setTitle(song.title)
       .setURL(song.url)
-      .setAuthor({name: 'Listening: ', url: song.url})
+      .setAuthor({name: i18n.t('musicplayer.authorListening'), url: song.url})
       .setThumbnail(song.thumbnail);
 
     const buttonsRow = getMusicButtons();

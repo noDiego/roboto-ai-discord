@@ -206,7 +206,8 @@ class RobotoClass{
       },
 
       create_image: async (args) => {
-        if (!CONFIG.imageCreationEnabled) return `The image creation is disabled.`
+        const guildData = this.getGuildData(inputData.guildId);
+        if (!CONFIG.imageCreationEnabled || !guildData.guildConfig.imageCreationEnabled) return `The image creation is disabled by an Administrator.`
 
         logger.info(`Creating image for prompt "${JSON.stringify(args.prompt)}"`)
 
@@ -231,7 +232,8 @@ class RobotoClass{
       },
 
       edit_image: async (args) => {
-        if (!CONFIG.imageCreationEnabled) return `The image creation is disabled.`
+        const guildData = this.getGuildData(inputData.guildId);
+        if (!CONFIG.imageCreationEnabled || !guildData.guildConfig.imageCreationEnabled) return `The image creation is disabled by an Administrator.`
 
         logger.info(`Editing image for prompt "${JSON.stringify(args.prompt)}"`)
 

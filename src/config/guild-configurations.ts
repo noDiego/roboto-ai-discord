@@ -13,6 +13,7 @@ export interface GuildConfiguration {
   maxMessages?: number;
   ttsProvider?: 'OPENAI' | 'ELEVENLABS';
   imageCreationEnabled?: boolean;
+  locale?: string;
 }
 
 type UpdateOptions = Partial<Omit<GuildConfiguration, 'guildId'>>;

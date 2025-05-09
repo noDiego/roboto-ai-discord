@@ -14,6 +14,11 @@ export default {
         stop: "Arrêter",
         skip: "Passer",
     },
+    musicplayer: {
+        authorListening: "En écoute: ",
+        authorAddingOne: "Ajout de la chanson à la liste",
+        authorAddingMany: "Ajout de {{count}} chansons à la liste."
+    },
     commands: {
         image: {
             description: "Génère une image avec l'instruction reçue",
