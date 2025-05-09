@@ -1,9 +1,7 @@
-// src/commands/configuration.ts
 import { EmbedBuilder, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { GuildConfiguration, guildConfigurationManager } from "../config/guild-configurations";
 import Roboto from "../roboto";
 import i18n from "../locales";
-import { CONFIG } from "../config";
 
 const maxPromptPreview = 300;
 
