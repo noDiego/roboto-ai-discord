@@ -106,7 +106,7 @@ class RobotoClass{
     const handlers: Record<string, (args: any, inputData: BotInput) => Promise<string>> = {
 
       search_youtube: async (args) => {
-        const searchResult = await this._musicService.search(args.query, MusicProvider.YOUTUBE);
+        const searchResult = await this._musicService.search(args.query, MusicProvider.YOUTUBE, args.maxResults);
         if (!searchResult.success)
           return `No song was found on YouTube that matches: "${args.query}".`;
         return `Song Object Results: ${JSON.stringify(searchResult.result)}`;

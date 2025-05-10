@@ -23,16 +23,17 @@ export const AITools: Array<Tool> = [
     {
         type: "function",
         name: "search_youtube",
-        description: "Searches YouTube for a song using either a search query or a YouTube link, and returns a list of song objects.",
+        description: "Searches YouTube and returns up to N music video results matching the query, from which the model can select one or more.",
         parameters: {
             type: "object",
             properties: {
                 query: {
                     type: "string",
                     description: "The search term or a YouTube URL."
-                }
+                },
+                maxResults: { type: "integer", description: "Número máximo de vídeos a retornar (por defecto, 5)." }
             },
-            required: ["query"],
+            required: ["query", "maxResults"],
             additionalProperties: false,
         },
         strict: true

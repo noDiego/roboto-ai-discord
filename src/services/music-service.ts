@@ -18,7 +18,7 @@ export class MusicService {
     this.youtubeService = new YoutubeService();
   }
 
-  async search(query: string, provider: MusicProvider): Promise<ActionResult<SongInfo[]>>{
+  async search(query: string, provider: MusicProvider, maxResults?: number): Promise<ActionResult<SongInfo[]>>{
 
     let results: SongInfo[] = [];
 
@@ -30,6 +30,7 @@ export class MusicService {
         results = searchMP3(query);
         break;
     }
+    if (maxResults) results = results.slice(0, maxResults);
     if (results.length === 0) return {success: false, code: 2, resultMsg: 'No results'};
     return { success: true, result: results, code: 0 };
   }
