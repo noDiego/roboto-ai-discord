@@ -119,7 +119,7 @@ class RobotoClass{
         return `Search result: "${searchResult}"`;
       },
 
-      play_youtube_song: async (args, inputData) => {
+      play_youtube_songs: async (args, inputData) => {
         const songList: SongInfo[] = args.songs;
         const addResult = await this._musicService.addToQueue(inputData, songList);
         let functionResult = '';

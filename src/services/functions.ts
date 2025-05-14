@@ -31,7 +31,7 @@ export const AITools: Array<Tool> = [
                     type: "string",
                     description: "The search term or a YouTube URL."
                 },
-                maxResults: { type: "integer", description: "Número máximo de vídeos a retornar (por defecto, 5)." }
+                maxResults: { type: ["integer","null"], description: "Maximum number of videos to return (default 10). OPTIONAL", nullable: true }
             },
             required: ["query", "maxResults"],
             additionalProperties: false,
@@ -40,14 +40,14 @@ export const AITools: Array<Tool> = [
     },
     {
         type: "function",
-        name: "play_youtube_song",
-        description: "Plays (or add to queue) one or more YouTube songs by passing an array of song objects.",
+        name: "play_youtube_songs",
+        description: "Play or adds one or multiple YouTube songs to the playback queue in a single call. Receives an array ‘songs’ with objects { provider, url, title, thumbnail }. The first song will play immediately if nothing is currently playing; the rest will be queued in the given order.",
         parameters: {
             type: "object",
             properties: {
                 songs: {
                     type: "array",
-                    description: "List of YouTube songs to play",
+                    description: "List of songs to play or enqueue in one request.",
                     items: {
                         type: "object",
                         properties: {
@@ -57,15 +57,16 @@ export const AITools: Array<Tool> = [
                             },
                             url: {
                                 type: "string",
-                                description: "The YouTube video URL."
+                                description: "YouTube video URL"
                             },
                             title: {
                                 type: "string",
-                                description: "The title of the song."
+                                description: "Song title"
                             },
                             thumbnail: {
-                                type: "string",
-                                description: "Thumbnail URL for the song (optional)."
+                                type: ["string","null"],
+                                description: "Thumbnail URL (optional).",
+                                nullable: true
                             }
                         },
                         required: ["provider","url", "title","thumbnail"],
