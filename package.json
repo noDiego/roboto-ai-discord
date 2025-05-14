@@ -41,6 +41,7 @@
     "moment-timezone": "^0.5.48",
     "mp3-duration": "^1.1.0",
     "openai": "4.96.2",
+    "pg": "^8.15.6",
     "play-dl": "^1.9.7",
     "rimraf": "^6.0.1",
     "scrape-youtube": "^2.4.0",

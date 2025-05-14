@@ -49,6 +49,7 @@ export class OpenAIService {
       const args = JSON.parse(toolCall.arguments);
 
       logger.debug(`[OpenAI] Called function "${name}".`);
+      logger.debug(`[OpenAI] Args: ${JSON.stringify(args)}`);
 
       try {
         const result = await Roboto.executeFunctions(name, args, inputData);

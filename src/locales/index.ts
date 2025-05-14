@@ -1,13 +1,11 @@
 import en from './en';
 import es from './es';
-import fr from './fr';
 
 type TranslationType = typeof en;
 
 const translations: Record<string, TranslationType> = {
   en,
   es,
-  fr,
 };
 
 class LocalizationService {

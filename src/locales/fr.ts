@@ -13,11 +13,7 @@ export default {
         play: "Lecture",
         stop: "Arrêter",
         skip: "Passer",
-    },
-    musicplayer: {
-        authorListening: "En écoute: ",
-        authorAddingOne: "Ajout de la chanson à la liste",
-        authorAddingMany: "Ajout de {{count}} chansons à la liste."
+        listeningMsg: 'Écoutant'
     },
     commands: {
         image: {

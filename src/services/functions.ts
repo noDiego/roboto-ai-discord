@@ -23,16 +23,17 @@ export const AITools: Array<Tool> = [
     {
         type: "function",
         name: "search_youtube",
-        description: "Searches YouTube for a song using either a search query or a YouTube link, and returns a list of song objects.",
+        description: "Searches YouTube and returns up to N music video results matching the query, from which the model can select one or more.",
         parameters: {
             type: "object",
             properties: {
                 query: {
                     type: "string",
                     description: "The search term or a YouTube URL."
-                }
+                },
+                maxResults: { type: "integer", description: "Número máximo de vídeos a retornar (por defecto, 5)." }
             },
-            required: ["query"],
+            required: ["query", "maxResults"],
             additionalProperties: false,
         },
         strict: true
@@ -74,23 +75,6 @@ export const AITools: Array<Tool> = [
             },
             required: ["songs"],
             additionalProperties: false
-        },
-        strict: true
-    },
-    {
-        type: "function",
-        name: "play_mp3",
-        description: "Search and play a mp3 file from the local storage.",
-        parameters: {
-            type: "object",
-            properties: {
-                query: {
-                    type: "string",
-                    description: "The search term of the mp3 file to play."
-                }
-            },
-            required: ["query"],
-            additionalProperties: false,
         },
         strict: true
     },
@@ -236,6 +220,37 @@ This function always requires at least one reference image as input, and must no
             },
             required: ["prompt","imageIds", "outputFormat", "mask","background"],
             additionalProperties: false
+        },
+        strict: true
+    },
+    {
+        type: "function",
+        name: "get_corvo_songs_details",
+        description: `Obtiene un listado completo de las canciones de Corvo con sus respectivas descripciones. Si se proporciona un parámetro de búsqueda, filtra y retorna únicamente las canciones que coincidan con el título o descripcion especificado`,
+        parameters: {
+            type: "object",
+            properties: {
+                query_cs: { type: ["string","null"], description: "Parte del título de la o las canciones para filtrar los resultados (Opcional)" },
+            },
+            required: ["query_cs"],
+            additionalProperties: false
+        },
+        strict: true
+    },
+    {
+        type: "function",
+        name: "play_corvo_song",
+        description: "Reproduce o agrega a la cola una canción específica de Corvo. Si envias \"*\" se reproduciran todas las canciones",
+        parameters: {
+            type: "object",
+            properties: {
+                title: {
+                    type: "string",
+                    description: `El título de la canción de Corvo a reproducir. Si envias "*" se reproduciran todas las canciones`
+                }
+            },
+            required: ["title"],
+            additionalProperties: false,
         },
         strict: true
     }

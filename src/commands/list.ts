@@ -23,7 +23,7 @@ export function buildSongList(interaction: CommandInteraction) {
 
   if (guildData.songsQueue.length >= 1) {
     guildData.songsQueue.forEach(songInfo => {
-      songList = songList + "\n- " + songInfo.title + ` (${songInfo.provider})`;
+      songList = songList + "\n- " + songInfo.title;
     })
   }
 

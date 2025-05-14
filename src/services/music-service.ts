@@ -8,6 +8,7 @@ import { getMusicButtons, getUserName, temporalMsg } from '../utils';
 import logger from '../logger';
 import { searchMP3, startMP3Playback } from "./mp3-service";
 import i18n from "../locales";
+import { CorvoService } from "./corvo-service";
 
 
 export class MusicService {
@@ -18,7 +19,7 @@ export class MusicService {
     this.youtubeService = new YoutubeService();
   }
 
-  async search(query: string, provider: MusicProvider): Promise<ActionResult<SongInfo[]>>{
+  async search(query: string, provider: MusicProvider, maxResults?: number): Promise<ActionResult<SongInfo[]>>{
 
     let results: SongInfo[] = [];
 
@@ -29,7 +30,11 @@ export class MusicService {
       case 'MP3':
         results = searchMP3(query);
         break;
+      case 'CORVO':
+        results = CorvoService.searchCorvoSong(query);
+        break;
     }
+    if (maxResults) results = results.slice(0, maxResults);
     if (results.length === 0) return {success: false, code: 2, resultMsg: 'No results'};
     return { success: true, result: results, code: 0 };
   }
@@ -47,19 +52,17 @@ export class MusicService {
               .setColor(0x0099FF)
               .setTitle(songs[0].title)
               .setURL(songs[0].url)
-              .setAuthor({name: i18n.t('musicplayer.authorAddingOne'), url: songs[0].url})
+              .setAuthor({name: `Agregando a la lista`, url: songs[0].url})
               .setThumbnail(songs[0].thumbnail) :
           new EmbedBuilder()
               .setColor(0x0099FF)
-              .setAuthor({name: i18n.t('musicplayer.authorAddingMany', {count: songs.length})})
+              .setAuthor({name: 'Agregadas '+songs.length+' musiquitas a la lista.'})
               .setThumbnail(songs[0].thumbnail);
 
       channel.send({embeds: [msgEmbd]});
-      logger.debug(`Added ${songs.length} songs. Player Status:"${actualStatus}"`)
       return { success: true, result: songs, code: actualStatus == 'playing'? 10 : 11 };
     }
 
-    logger.debug(`Added 1 song. Player Status:"${actualStatus}"`)
     return { success: true, result: songs, code: 0 };
   }
 
@@ -78,7 +81,9 @@ export class MusicService {
       case MusicProvider.MP3:
         result = await startMP3Playback(input, song);
         break;
-      case MusicProvider.SOUNDCLOUD:
+      case MusicProvider.CORVO:
+        result = await CorvoService.startCorvoPlayback(input, song);
+        break;
     }
 
     if(!result.success) return result;
@@ -101,7 +106,7 @@ export class MusicService {
       .setColor(0x0099FF)
       .setTitle(song.title)
       .setURL(song.url)
-      .setAuthor({name: i18n.t('musicplayer.authorListening'), url: song.url})
+      .setAuthor({name: `${i18n.t('listeningMsg')}: `, url: song.url})
       .setThumbnail(song.thumbnail);
 
     const buttonsRow = getMusicButtons();

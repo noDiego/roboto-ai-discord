@@ -13,6 +13,7 @@ import { CONFIG } from "./config";
 import { AudioPlayerStatus, createAudioPlayer } from "@discordjs/voice";
 import { guildConfigurationManager } from "./config/guild-configurations";
 import { ElevenLabsService } from "./services/eleven-service";
+import { CorvoService, normalizeQuery } from "./services/corvo-service";
 
 class RobotoClass{
 
@@ -106,7 +107,7 @@ class RobotoClass{
     const handlers: Record<string, (args: any, inputData: BotInput) => Promise<string>> = {
 
       search_youtube: async (args) => {
-        const searchResult = await this._musicService.search(args.query, MusicProvider.YOUTUBE);
+        const searchResult = await this._musicService.search(args.query, MusicProvider.YOUTUBE, args.maxResults);
         if (!searchResult.success)
           return `No song was found on YouTube that matches: "${args.query}".`;
         return `Song Object Results: ${JSON.stringify(searchResult.result)}`;
@@ -162,6 +163,45 @@ class RobotoClass{
         }
 
       },
+      play_corvo_song: async (args, inputData) => {
+        const searchResult = await this._musicService.search(args.title, MusicProvider.CORVO);
+        const addResult = await this._musicService.addToQueue(inputData, searchResult.result);
+        let functionResult = '';
+        let songDescription = '';
+
+        if(addResult.success){
+          songDescription = CorvoService.corvoSongs.find(c => c.song_name.includes(searchResult.result[0].title)).song_description;
+        }
+
+        if (addResult.success && addResult.code === 10)
+          return `Added to the queue: "${searchResult.result[0].title}"`+ (searchResult.result.length>1?` and ${searchResult.result.length - 1} more songs.`:``);
+        if (addResult.success && addResult.code === 11)
+          functionResult = `Added to the queue: "${searchResult.result[0].title}"`+ (searchResult.result.length>1?` and ${searchResult.result.length - 1} more songs. `:``);
+        if (!addResult.success)
+          return `No mp3 file was found that matches: "${args.title}".`
+
+        const playResult = await this._musicService.startPlayback(inputData);
+
+        if (playResult.success){
+          return `${functionResult}Playing song: "${searchResult.result[0].title}". Description: "${songDescription}"`;
+        } else {
+          return `Error playing: "${searchResult.result[0].title}". ${playResult.error}`
+        }
+      },
+      get_corvo_songs_details: async (args, inputData) => {
+        const queryNormalized = args.query_cs ? normalizeQuery(args.query_cs) : null;
+        const corvoResultList = queryNormalized
+            ? CorvoService.corvoSongs.filter(c =>
+                normalizeQuery(c.song_name).includes(queryNormalized) ||
+                normalizeQuery(c.song_description).includes(queryNormalized)
+            )
+            : CorvoService.corvoSongs;
+        const finalList = corvoResultList.map(c => ({
+          title: c.song_name,
+          description: c.song_description
+        }));
+        return JSON.stringify(finalList);
+      },
 
       get_songs_queue: async (args, inputData) => {
         const guildData = this.getGuildData(inputData.guildId);
@@ -206,8 +246,7 @@ class RobotoClass{
       },
 
       create_image: async (args) => {
-        const guildData = this.getGuildData(inputData.guildId);
-        if (!CONFIG.imageCreationEnabled || !guildData.guildConfig.imageCreationEnabled) return `The image creation is disabled by an Administrator.`
+        if (!CONFIG.imageCreationEnabled) return `The image creation is disabled.`
 
         logger.info(`Creating image for prompt "${JSON.stringify(args.prompt)}"`)
 
@@ -232,8 +271,7 @@ class RobotoClass{
       },
 
       edit_image: async (args) => {
-        const guildData = this.getGuildData(inputData.guildId);
-        if (!CONFIG.imageCreationEnabled || !guildData.guildConfig.imageCreationEnabled) return `The image creation is disabled by an Administrator.`
+        if (!CONFIG.imageCreationEnabled) return `The image creation is disabled.`
 
         logger.info(`Editing image for prompt "${JSON.stringify(args.prompt)}"`)
 
@@ -302,36 +340,38 @@ class RobotoClass{
     const ttsProvider = this.getGuildData(input.guildId).guildConfig.ttsProvider;
 
     try {
-      const connection = await this.discordService.getGuildVoiceConnection(input);
-      const musicPlayer = await this.discordService.getAudioPlayer(input);
-      const wasPlaying = musicPlayer.state.status === AudioPlayerStatus.Playing;
       const cleanedMsg = cleanMessage(msgToSay);
-
-      const ttsPlayer = createAudioPlayer();
-      let ttsStream;
-          ttsStream = ttsProvider == 'OPENAI' ? await this.openAI.speechStream(cleanedMsg, instructions, voice) :
-          await this._elevenLabsService.ttsStream(msgToSay, CONFIG.ELEVENLABS.speechVoice);
-
-      connection.subscribe(ttsPlayer);
-
-      if (wasPlaying) musicPlayer.pause();
-
       logger.debug(`Text to pronounce: ${cleanedMsg}`);
-
-      const onTtsIdle = (oldState, newState) => {
-        if (newState.status === AudioPlayerStatus.Idle) {
-          connection.subscribe(musicPlayer);
-          if (wasPlaying) musicPlayer.unpause();
-          ttsPlayer.removeListener('stateChange', onTtsIdle);
-          ttsPlayer.stop();
-        }
-      };
-      ttsPlayer.on('stateChange', onTtsIdle);
-
-      return await this.discordService.playAudio(input, ttsStream, undefined, ttsPlayer);
+      const ttsStream = ttsProvider == 'OPENAI' ? await this.openAI.speechStream(cleanedMsg, instructions, voice) :
+          await this._elevenLabsService.ttsStream(msgToSay, CONFIG.ELEVENLABS.speechVoice);
+      return await this.pauseAndPlay(input, ttsStream);
     } catch (error) {
       logger.error(`Error in speechStream: ${error.message}`);
     }
+  }
+
+  public async pauseAndPlay(input: BotInput | Message<boolean>, source: any) {
+    const connection = await this.discordService.getGuildVoiceConnection(input);
+    const musicPlayer = await this.discordService.getAudioPlayer(input);
+    const wasPlaying = musicPlayer.state.status === AudioPlayerStatus.Playing;
+
+    const ttsPlayer = createAudioPlayer();
+
+    connection.subscribe(ttsPlayer);
+
+    if (wasPlaying) musicPlayer.pause();
+
+    const onTtsIdle = (oldState, newState) => {
+      if (newState.status === AudioPlayerStatus.Idle) {
+        connection.subscribe(musicPlayer);
+        if (wasPlaying) musicPlayer.unpause();
+        ttsPlayer.removeListener('stateChange', onTtsIdle);
+        ttsPlayer.stop();
+      }
+    };
+    ttsPlayer.on('stateChange', onTtsIdle);
+
+    return await this.discordService.playAudio(input, source, undefined, ttsPlayer);
   }
 
   public getGuildData(guildId: string, guildName?: string): GuildData{
@@ -358,6 +398,10 @@ class RobotoClass{
 
   get musicService(): MusicService {
     return this._musicService;
+  }
+
+  get elevenLabs(): ElevenLabsService {
+    return this._elevenLabsService;
   }
 
 }

@@ -12,12 +12,8 @@ export default {
     pause: "Pausar",
     play: "Reproducir",
     stop: "Detener",
-    skip: "Saltar"
-  },
-  musicplayer: {
-    authorListening: "Escuchando: ",
-    authorAddingOne: "Agregando canción a la lista",
-    authorAddingMany: "Agregando {{count}} canciones a la lista."
+    skip: "Saltar",
+    listeningMsg: 'Escuchando'
   },
   commands: {
     image:{

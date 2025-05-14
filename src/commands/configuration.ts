@@ -1,3 +1,4 @@
+// src/commands/configuration.ts
 import { EmbedBuilder, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { GuildConfiguration, guildConfigurationManager } from "../config/guild-configurations";
 import Roboto from "../roboto";

@@ -21,7 +21,7 @@ export interface SongInfo {
 
 export enum MusicProvider{
   YOUTUBE = 'YOUTUBE',
-  SOUNDCLOUD = 'SOUNDCLOUD',
+  CORVO = 'CORVO',
   MP3 = 'MP3'
 }
 

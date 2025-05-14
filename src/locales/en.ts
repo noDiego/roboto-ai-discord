@@ -13,11 +13,7 @@ export default {
     play: "Play",
     stop: "Stop",
     skip: "Skip",
-  },
-  musicplayer: {
-    authorListening: "Listening: ",
-    authorAddingOne: "Adding song to the list",
-    authorAddingMany: "Adding {{count}} songs to the list."
+    listeningMsg: 'Listening'
   },
   commands: {
     image: {
