@@ -31,7 +31,7 @@ export const AITools: Array<Tool> = [
                     type: "string",
                     description: "The search term or a YouTube URL."
                 },
-                maxResults: { type: "integer", description: "Número máximo de vídeos a retornar (por defecto, 5)." }
+                maxResults: { type: ["integer","null"], description: "Maximum number of videos to return (default 10). OPTIONAL", nullable: true }
             },
             required: ["query", "maxResults"],
             additionalProperties: false,
