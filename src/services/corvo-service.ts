@@ -59,6 +59,7 @@ class CorvoSvc {
                 logger.info("[startMP3Playback] Playing: " + candidate);
                 return { success: true, code: 0, result: candidate };
             } catch (error: any) {
+                logger.debug(`[ERROR] ${error.message}`);
                 lastError = error;
             }
         }
