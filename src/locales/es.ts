@@ -15,6 +15,11 @@ export default {
     skip: "Saltar",
     listeningMsg: 'Escuchando'
   },
+  musicplayer: {
+    authorListening: "Escuchando: ",
+    authorAddingOne: "Agregando canción a la lista",
+    authorAddingMany: "Agregando {{count}} canciones a la lista."
+  },
   commands: {
     image:{
       description: "Genera una imagen con la instrucción recibida",

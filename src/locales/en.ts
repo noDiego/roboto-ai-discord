@@ -12,8 +12,12 @@ export default {
     pause: "Pause",
     play: "Play",
     stop: "Stop",
-    skip: "Skip",
-    listeningMsg: 'Listening'
+    skip: "Skip"
+  },
+  musicplayer: {
+    authorListening: "Listening: ",
+    authorAddingOne: "Adding song to the list",
+    authorAddingMany: "Adding {{count}} songs to the list."
   },
   commands: {
     image: {

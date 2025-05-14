@@ -106,7 +106,7 @@ export class MusicService {
       .setColor(0x0099FF)
       .setTitle(song.title)
       .setURL(song.url)
-      .setAuthor({name: `${i18n.t('listeningMsg')}: `, url: song.url})
+      .setAuthor({name: `${i18n.t('musicplayer.authorListening')}: `, url: song.url})
       .setThumbnail(song.thumbnail);
 
     const buttonsRow = getMusicButtons();
