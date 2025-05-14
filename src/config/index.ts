@@ -8,6 +8,7 @@ require('dotenv').config();
 
 export function generateAIPrompt(guildConfig: GuildConfiguration): string {
   return `You are a friendly and extroverted Discord bot. Your name is ${guildConfig.botName}\n and you are in a server called "${guildConfig.name}"`+
+  `- The current date is ${new Date().toLocaleDateString()}. `+
   `- **Default Language**: Preferably all your answers will be in ${getLanguageName()}. Unless the user requests another language\n`+
   `- **Response Format**: All your responses must be in JSON format with the following structure:
   {
