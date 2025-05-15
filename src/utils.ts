@@ -5,6 +5,9 @@ import logger from "./logger";
 import i18n from "./locales";
 import * as https from "node:https";
 import { Readable } from "stream";
+import path from "node:path";
+import * as http from "node:http";
+import fs from "fs";
 
 export function getUserName(msg: BotInput): string | null {
   if (msg instanceof Message) {
@@ -266,4 +269,44 @@ export function bufferToStream(buffer) {
   stream.push(buffer);
   stream.push(null);
   return stream;
+}
+
+export function downloadMp3(fileUrl, destPath): Promise<any> {
+  return new Promise((resolve, reject) => {
+    try {
+      const urlObj = new URL(fileUrl);
+      const protocol = urlObj.protocol === 'https:' ? https : http;
+
+      const dir = path.dirname(destPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      const fileStream = fs.createWriteStream(destPath);
+      const request = protocol.get(urlObj, response => {
+        if (response.statusCode !== 200) {
+          return reject(new Error(`Error al descargar: código de estado ${response.statusCode}`));
+        }
+        response.pipe(fileStream);
+      });
+
+      request.on('error', err => {
+        fs.unlink(destPath, () => {});
+        reject(err);
+      });
+
+      // Cuando termine de escribir el fichero
+      fileStream.on('finish', () => {
+        fileStream.close(resolve);
+      });
+
+      fileStream.on('error', err => {
+        fs.unlink(destPath, () => {});
+        reject(err);
+      });
+      return destPath;
+    } catch (err) {
+      reject(err);
+    }
+  });
 }

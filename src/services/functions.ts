@@ -147,40 +147,66 @@ export const AITools: Array<Tool> = [
         },
         strict: true
     },
+    // {
+    //     type: "function",
+    //     name: "generate_speech",
+    //     description: "Generates an voice audio from text using the OpenAI TTS model. Instructions for tone and style can be customized, and a voice can optionally be selected.",
+    //     parameters: {
+    //         type: "object",
+    //         properties: {
+    //             input: {
+    //                 type: "string",
+    //                 description: "The text to be converted into audio."
+    //             },
+    //             instructions: {
+    //                 type: "string",
+    //                 description: "Instructions for the TTS model regarding intonation and style, such as emotion, tone, or accent."
+    //             },
+    //             voice: {
+    //                 type: ["string", "null"],
+    //                 enum: [
+    //                     "alloy",
+    //                     "ash",
+    //                     "ballad",
+    //                     "coral",
+    //                     "echo",
+    //                     "fable",
+    //                     "onyx",
+    //                     "nova",
+    //                     "sage",
+    //                     "shimmer",
+    //                     "verse"
+    //                 ],
+    //                 description: "The name of the voice to use (e.g., 'coral', 'alloy', 'ash', 'onyx'). Optional."
+    //             }
+    //         },
+    //         required: ["input", "instructions", "voice"],
+    //         additionalProperties: false
+    //     },
+    //     strict: true
+    // },
     {
         type: "function",
-        name: "generate_speech",
-        description: "Generates an voice audio from text using the OpenAI TTS model. Instructions for tone and style can be customized, and a voice can optionally be selected.",
+        name: "generate_song",
+        description: "Generate a new song based on a given prompt, styles.",
         parameters: {
             type: "object",
             properties: {
-                input: {
+                title: {
                     type: "string",
-                    description: "The text to be converted into audio."
+                    description: "Title of the song to be generated."
                 },
-                instructions: {
+                prompt: {
                     type: "string",
-                    description: "Instructions for the TTS model regarding intonation and style, such as emotion, tone, or accent."
+                    description: "Prompt to be used to generate the song. You can put exactly what the user wrote"
                 },
-                voice: {
-                    type: ["string", "null"],
-                    enum: [
-                        "alloy",
-                        "ash",
-                        "ballad",
-                        "coral",
-                        "echo",
-                        "fable",
-                        "onyx",
-                        "nova",
-                        "sage",
-                        "shimmer",
-                        "verse"
-                    ],
-                    description: "The name of the voice to use (e.g., 'coral', 'alloy', 'ash', 'onyx'). Optional."
-                }
+                styles: {
+                    type: "array",
+                    description: "Musical styles to be used to generate the song, can be one or many (e.g., Rock, Pop, Rap..)",
+                    items: { type: "string" }
+                },
             },
-            required: ["input", "instructions", "voice"],
+            required: ["title", "prompt", "styles"],
             additionalProperties: false
         },
         strict: true

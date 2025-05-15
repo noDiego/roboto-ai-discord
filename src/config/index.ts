@@ -50,6 +50,13 @@ export const CONFIG = {
     speechModel: process.env.ELEVENLABS_SPEECH_MODEL! || 'eleven_multilingual_v2',
     speechVoice: process.env.ELEVENLABS_SPEECH_VOICEID! || 'N2lVS1w4EtoT3dr4eOWO'
   },
+  SUNO:{
+    baseURL: process.env.SUNO_BASE_URL || 'https://apibox.erweima.ai',
+    apiKey: process.env.SUNOAPI_KEY!
+  },
+  USEAPI: {
+    apiKey: process.env.USEAPI_API_KEY!
+  },
   Youtube: {
     tempDir: join(__dirname, '../../temp'),
     maxAgeMs: Number(process.env.YOUTUBE_MAX_AGEMS) || (4 * 60 * 60 * 1000), // 4 hours

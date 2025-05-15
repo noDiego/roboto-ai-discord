@@ -4,6 +4,7 @@ import logger from '../logger';
 import Roboto from '../roboto';
 import { BotInput } from '../interfaces/discord-interfaces';
 import { ResponseInput, Tool } from "openai/src/resources/responses/responses";
+import { songPrompt } from "../custom";
 
 export class OpenAIService {
   private openAI: OpenAI;
@@ -233,6 +234,35 @@ export class OpenAIService {
     }
 
     return response.body as any;
+  }
+
+
+  async lyricSongGeneration(prompt: string, title: string){
+
+    logger.info(`[OpenAI->lyricSongGeneration] Generating song with: "${prompt}"`);
+
+    const messages = structuredClone(songPrompt);
+
+    messages.push({
+      role: "user",
+      content: [
+        {
+          type: "input_text",
+          text: `Prompt para generar la cancion titulada "${title}" : ${prompt}. (Solo debes retornar la letra, no el titulo)`
+        }
+      ]
+    })
+
+    const responseResult = await this.openAI.responses.create({
+      model: 'gpt-4.1-mini',
+      input: messages,
+      temperature: 1,
+      max_output_tokens: 2048,
+      top_p: 1,
+      store: true
+    });
+
+    return responseResult.output_text;
   }
 
 

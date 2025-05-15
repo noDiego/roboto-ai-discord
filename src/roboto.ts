@@ -3,7 +3,15 @@ import { commands } from './commands';
 import { GuildData, MusicProvider, SongInfo } from './interfaces/guild-data';
 import { BotInput, MusicAction } from './interfaces/discord-interfaces';
 import { OpenAIService } from './services/openai-service';
-import { bufferToStream, cleanMessage, imageToBase64, musicControlAction, replyLongMessage, sleep } from './utils';
+import {
+  bufferToStream,
+  cleanMessage,
+  downloadMp3,
+  imageToBase64,
+  musicControlAction,
+  replyLongMessage,
+  sleep
+} from './utils';
 import logger from './logger';
 import { msgToAI } from './ai-message-handling';
 import { DiscordService } from './services/discord-service';
@@ -14,6 +22,13 @@ import { AudioPlayerStatus, createAudioPlayer } from "@discordjs/voice";
 import { guildConfigurationManager } from "./config/guild-configurations";
 import { ElevenLabsService } from "./services/eleven-service";
 import { CorvoService, normalizeQuery } from "./services/corvo-service";
+import { songService } from "./services/song-service";
+import { useAPIService } from "./services/useapi-service";
+import axios from "axios";
+import { Readable } from "stream";
+import path from "node:path";
+import { createReadStream, readFile } from "node:fs";
+import { readFileSync } from "fs";
 
 class RobotoClass{
 
@@ -245,6 +260,18 @@ class RobotoClass{
         return `The audio message was generated successfully. Now, you should respond using this message so that the user can also read it: "${input}"`;
       },
 
+      generate_song: async (args, inputData) => {
+        const {title, prompt, styles} = args;
+
+
+        const lyricGenerated = await this._openAI.lyricSongGeneration(prompt, title);
+        const lyricData = JSON.parse(lyricGenerated);
+
+        this.createAndPlaySong(styles, lyricData, inputData);
+
+        return `La canción titulada "${lyricData.title}" esta en proceso de creación. Pidele al usuario que espere 1 minuto.`;
+      },
+
       create_image: async (args) => {
         if (!CONFIG.imageCreationEnabled) return `The image creation is disabled.`
 
@@ -386,6 +413,32 @@ class RobotoClass{
       this._guildDataList.push(guildData)
     }
     return guildData;
+  }
+
+  private async createAndPlaySong(styles, lyricData: any, inputData: BotInput ){
+    const channel = inputData.channel as GuildTextBasedChannel;
+
+    const songResponse = await useAPIService.generateSongStream({
+      lyrics: lyricData.lyrics,
+      title: lyricData.title,
+      desc: styles?.join(', '),
+      model: 'V6'
+    })
+
+    this.pauseAndPlay(inputData, songResponse.data);
+
+    const path1 = path.join(__dirname + "/../assets/custom_corvo/", `${lyricData.title}.mp3`);
+    const path2 = path.join(__dirname + "/../assets/custom_corvo/", `${lyricData.title}_2.mp3`);
+
+    const dl1 = downloadMp3(songResponse.urls[0], path1);
+    const dl2 = downloadMp3(songResponse.urls[1], path2);
+
+    await Promise.all([dl1, dl2]);
+
+    const attachment = new AttachmentBuilder(createReadStream(path1), {name: lyricData.title+'.mp3'});
+    const attachment2 = new AttachmentBuilder(createReadStream(path2), {name: lyricData.title+'_2.mp3'});
+
+    channel.send({content: lyricData.lyrics, files: [attachment, attachment2]});
   }
 
   get openAI(): OpenAIService {
