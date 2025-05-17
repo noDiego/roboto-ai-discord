@@ -37,6 +37,7 @@ export const CONFIG = {
   locale: process.env.BOT_LOCALE || 'en',
   ttsProvider: (process.env.TTS_PROVIDER || 'OPENAI') as any,
   imageCreationEnabled: process.env.IMAGE_CREATION_ENABLED?.toLowerCase() == 'true',
+  mp3Folder: __dirname + "/../../assets/mp3/",
   OPENAI: {
     apiKey: process.env.OPENAI_API_KEY!,
     chatModel: process.env.OPENAI_CHAT_MODEL! || 'gpt-4.1-mini',

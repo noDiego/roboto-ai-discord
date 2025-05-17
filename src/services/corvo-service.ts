@@ -57,7 +57,7 @@ class CorvoSvc {
                 const readableFile = Readable.from(readedFile);
                 await Roboto.discordService.playAudio(input, readableFile);
                 logger.info("[startMP3Playback] Playing: " + candidate);
-                return { success: true, code: 0, result: candidate };
+                return { success: true, code: 0, data: candidate };
             } catch (error: any) {
                 logger.debug(`[ERROR] ${error.message}`);
                 lastError = error;

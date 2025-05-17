@@ -1,4 +1,4 @@
-import { AttachmentBuilder, GuildTextBasedChannel, Interaction, Message } from 'discord.js';
+import { AttachmentBuilder, EmbedBuilder, GuildTextBasedChannel, Interaction, Message } from 'discord.js';
 import { commands } from './commands';
 import { GuildData, MusicProvider, SongInfo } from './interfaces/guild-data';
 import { BotInput, MusicAction } from './interfaces/discord-interfaces';
@@ -7,6 +7,7 @@ import {
   bufferToStream,
   cleanMessage,
   downloadMp3,
+  getAudioStream,
   imageToBase64,
   musicControlAction,
   replyLongMessage,
@@ -22,13 +23,11 @@ import { AudioPlayerStatus, createAudioPlayer } from "@discordjs/voice";
 import { guildConfigurationManager } from "./config/guild-configurations";
 import { ElevenLabsService } from "./services/eleven-service";
 import { CorvoService, normalizeQuery } from "./services/corvo-service";
-import { songService } from "./services/song-service";
+import { songService } from "./services/suno-service";
 import { useAPIService } from "./services/useapi-service";
-import axios from "axios";
-import { Readable } from "stream";
 import path from "node:path";
-import { createReadStream, readFile } from "node:fs";
-import { readFileSync } from "fs";
+import { ActionResult } from "./interfaces/action-result";
+import { SunoDataItem } from "./interfaces/sunoapi/suno-response";
 
 class RobotoClass{
 
@@ -118,6 +117,33 @@ class RobotoClass{
     }
   }
 
+  public async addAndPlaySongs(songs: SongInfo[], inputData: BotInput, extraDescription?: string): Promise<string> {
+    const addResult = await this._musicService.addToQueue(inputData, songs);
+
+    let functionResult = '';
+
+    if (addResult.success && addResult.code === 10) {
+      return `Added to the queue: "${songs[0].title}"` + (songs.length > 1 ? ` and ${songs.length - 1} more songs.` : ``);
+    }
+
+    if (addResult.success && addResult.code === 11) {
+      functionResult = `Added to the queue: "${songs[0].title}"` + (songs.length > 1 ? ` and ${songs.length - 1} more songs. ` : ``);
+    }
+
+    if (!addResult.success) return `Error adding songs to queue`;
+
+    const playResult = await this._musicService.startPlayback(inputData);
+
+    if (playResult.success) {
+      let msg = `${functionResult}Playing: "${songs[0].title}".`;
+      if (extraDescription) msg += ` ${extraDescription}`;
+      return msg.trim();
+    } else {
+      return `Error playing: "${songs[0].title}". ${playResult.error}`;
+    }
+  }
+
+
   public async executeFunctions(functionName: string, args: any, inputData: BotInput): Promise<string>{
     const handlers: Record<string, (args: any, inputData: BotInput) => Promise<string>> = {
 
@@ -125,7 +151,7 @@ class RobotoClass{
         const searchResult = await this._musicService.search(args.query, MusicProvider.YOUTUBE, args.maxResults);
         if (!searchResult.success)
           return `No song was found on YouTube that matches: "${args.query}".`;
-        return `Song Object Results: ${JSON.stringify(searchResult.result)}`;
+        return `Song Object Results: ${JSON.stringify(searchResult.data)}`;
       },
 
       web_search: async (args) => {
@@ -136,72 +162,20 @@ class RobotoClass{
       },
 
       play_youtube_songs: async (args, inputData) => {
-        const songList: SongInfo[] = args.songs;
-        const addResult = await this._musicService.addToQueue(inputData, songList);
-        let functionResult = '';
-
-        if (addResult.success && addResult.code === 10)
-          return `Added to the queue: "${songList[0].title}"`+ (songList.length>1?` and ${songList.length - 1} more songs.`:``);
-        if (addResult.success && addResult.code === 11)
-          functionResult = `Added to the queue: "${songList[0].title}"`+ (songList.length>1?` and ${songList.length - 1} more songs. `:``);
-        if (!addResult.success)
-          return `Error adding songs to queue`;
-
-        const playResult = await this._musicService.startPlayback(inputData);
-
-        if (playResult.success){
-          return `${functionResult}Playing: "${songList[0].title}".`;
-        }else {
-          return `Error playing: "${songList[0].title}". ${playResult.error}`
-        }
-
+        return this.addAndPlaySongs(args.songs, inputData);
       },
-
       play_mp3: async (args, inputData) => {
         const searchResult = await this._musicService.search(args.query, MusicProvider.MP3);
-        const addResult = await this._musicService.addToQueue(inputData, searchResult.result);
-        let functionResult = '';
-
-        if (addResult.success && addResult.code === 10)
-          return `Added to the queue: "${searchResult.result[0].title}"`+ (searchResult.result.length>1?` and ${searchResult.result.length - 1} more songs.`:``);
-        if (addResult.success && addResult.code === 11)
-          functionResult = `Added to the queue: "${searchResult.result[0].title}"`+ (searchResult.result.length>1?` and ${searchResult.result.length - 1} more songs. `:``);
-        if (!addResult.success)
-          return `No mp3 file was found that matches: "${args.query}".`
-
-        const playResult = await this._musicService.startPlayback(inputData);
-
-        if (playResult.success){
-          return `${functionResult}Playing: "${searchResult.result[0].title}".`;
-        } else {
-          return `Error playing: "${searchResult.result[0].title}". ${playResult.error}`
-        }
-
+        if(!searchResult.success || !searchResult.data.length) return `No mp3 file was found that matches: "${args.query}".`;
+        return this.addAndPlaySongs(searchResult.data, inputData);
       },
       play_corvo_song: async (args, inputData) => {
         const searchResult = await this._musicService.search(args.title, MusicProvider.CORVO);
-        const addResult = await this._musicService.addToQueue(inputData, searchResult.result);
-        let functionResult = '';
-        let songDescription = '';
+        if(!searchResult.success || !searchResult.data.length) return `No mp3 file was found that matches: "${args.title}".`;
 
-        if(addResult.success){
-          songDescription = CorvoService.corvoSongs.find(c => c.song_name.includes(searchResult.result[0].title)).song_description;
-        }
+        const songDescription = CorvoService.corvoSongs.find(c => c.song_name.includes(searchResult.data[0].title))?.song_description ?? '';
 
-        if (addResult.success && addResult.code === 10)
-          return `Added to the queue: "${searchResult.result[0].title}"`+ (searchResult.result.length>1?` and ${searchResult.result.length - 1} more songs.`:``);
-        if (addResult.success && addResult.code === 11)
-          functionResult = `Added to the queue: "${searchResult.result[0].title}"`+ (searchResult.result.length>1?` and ${searchResult.result.length - 1} more songs. `:``);
-        if (!addResult.success)
-          return `No mp3 file was found that matches: "${args.title}".`
-
-        const playResult = await this._musicService.startPlayback(inputData);
-
-        if (playResult.success){
-          return `${functionResult}Playing song: "${searchResult.result[0].title}". Description: "${songDescription}"`;
-        } else {
-          return `Error playing: "${searchResult.result[0].title}". ${playResult.error}`
-        }
+        return this.addAndPlaySongs(searchResult.data, inputData, `Description: "${songDescription}"`);
       },
       get_corvo_songs_details: async (args, inputData) => {
         const queryNormalized = args.query_cs ? normalizeQuery(args.query_cs) : null;
@@ -266,8 +240,10 @@ class RobotoClass{
 
         const lyricGenerated = await this._openAI.lyricSongGeneration(prompt, title);
         const lyricData = JSON.parse(lyricGenerated);
+        lyricData.lyrics = lyricData.lyrics.replace(/\(([^)]+)\)/g, '[$1]');
+        lyricData.title = lyricData.title? lyricData.title : title;
 
-        this.createAndPlaySong(styles, lyricData, inputData);
+        this.createSunoSong(styles, lyricData, inputData);
 
         return `La canción titulada "${lyricData.title}" esta en proceso de creación. Pidele al usuario que espere 1 minuto.`;
       },
@@ -415,8 +391,68 @@ class RobotoClass{
     return guildData;
   }
 
-  private async createAndPlaySong(styles, lyricData: any, inputData: BotInput ){
+  public async createSunoSong(styles: string, lyricData: any, inputData: BotInput) {
+    // Stream Process
+    const mp3Folder = CONFIG.mp3Folder;
     const channel = inputData.channel as GuildTextBasedChannel;
+    const taskId = await songService.startMusicGeneration(styles, lyricData, false);
+
+    const streamResult = await songService.waitSongsStream(taskId) as ActionResult<SunoDataItem[]>;
+
+    if(!streamResult.success){
+      logger.error(`Error creating stream: ${streamResult.error}`);
+      return channel.send(`Error creando la cancion: ${streamResult.error}`);
+    }
+
+    logger.info(`Reproduciendo cancion creada ${streamResult.data[0].title}`);
+
+    await channel.send(`**${streamResult.data[0].title}**\n\nLetra:\n\n${streamResult.data[0].prompt}`);
+
+    Roboto.addAndPlaySongs([{
+      provider: MusicProvider.MP3,
+      title: streamResult.data[0].title,
+      url: streamResult.data[0].streamAudioUrl,
+      thumbnail: streamResult.data[0].imageUrl,
+      duration: String(streamResult.data[0].duration)
+     },
+      {
+        provider: MusicProvider.MP3,
+        title: streamResult.data[1].title + ' v2',
+        url: streamResult.data[1].streamAudioUrl,
+        thumbnail: streamResult.data[1].imageUrl,
+        duration: String(streamResult.data[1].duration)
+      }], inputData);
+
+    // MP3 Process
+    const mp3ResultData = await songService.waitSongsMP3(taskId);
+    if (!mp3ResultData.success || (!mp3ResultData.data[0].audioUrl && !mp3ResultData.data[1].audioUrl)) {
+      logger.error('No se pudo generar los archivos MP3.');
+      return false;
+    }
+
+    const path1 = path.join(mp3Folder, `${mp3ResultData.data[0].title}.mp3`);
+    const path2 = path.join(mp3Folder, `${mp3ResultData.data[0].title} v2.mp3`);
+    const mp3URL1 = mp3ResultData.data[0].audioUrl;
+    const mp3URL2 = mp3ResultData.data[1].audioUrl;
+
+    if (mp3URL1) downloadMp3(mp3URL1, path1);
+    if (mp3URL2) downloadMp3(mp3URL2, path2);
+
+    let desc = '';
+    if (mp3URL1) desc += `- ${mp3ResultData.data[0].title}\n`;
+    if (mp3URL2) desc += `- ${mp3ResultData.data[0].title} v2`;
+
+    const msgEmbd = new EmbedBuilder()
+        .setColor(0x0099FF)
+        .setTitle('Cancioncitas creadas:')
+        .setDescription(desc);
+
+    return desc? await channel.send({embeds: [msgEmbd]}) : null;
+  }
+
+  private async createMurekaSong(styles, lyricData: any, inputData: BotInput ){
+    const channel = inputData.channel as GuildTextBasedChannel;
+    const mp3Folder = CONFIG.mp3Folder;
 
     const songResponse = await useAPIService.generateSongStream({
       lyrics: lyricData.lyrics,
@@ -427,18 +463,22 @@ class RobotoClass{
 
     this.pauseAndPlay(inputData, songResponse.data);
 
-    const path1 = path.join(__dirname + "/../assets/custom_corvo/", `${lyricData.title}.mp3`);
-    const path2 = path.join(__dirname + "/../assets/custom_corvo/", `${lyricData.title}_2.mp3`);
+    const path1 = path.join(mp3Folder, `${lyricData.title}_1.mp3`);
+    const path2 = path.join(mp3Folder, `${lyricData.title}_2.mp3`);
 
     const dl1 = downloadMp3(songResponse.urls[0], path1);
     const dl2 = downloadMp3(songResponse.urls[1], path2);
 
     await Promise.all([dl1, dl2]);
 
-    const attachment = new AttachmentBuilder(createReadStream(path1), {name: lyricData.title+'.mp3'});
-    const attachment2 = new AttachmentBuilder(createReadStream(path2), {name: lyricData.title+'_2.mp3'});
+    const msgEmbd = new EmbedBuilder()
+        .setColor(0x0099FF)
+        .setTitle('Cancioncitas creadas:')
+        .setDescription(`- ${lyricData.title}_1\n- ${lyricData.title}_2`);
 
-    channel.send({content: lyricData.lyrics, files: [attachment, attachment2]});
+    await channel.send(`**${lyricData.title}**\n\nLetra:\n${lyricData.lyrics}`);
+    return await channel.send({embeds:[msgEmbd]});
+    //channel.send({content: lyricData.lyrics, files: [attachment, attachment2]});
   }
 
   get openAI(): OpenAIService {

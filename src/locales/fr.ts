@@ -12,11 +12,10 @@ export default {
         pause: "Pause",
         play: "Lecture",
         stop: "Arrêter",
-        skip: "Passer",
-        listeningMsg: 'Écoutant'
+        skip: "Passer"
     },
     musicplayer: {
-        authorListening: "En écoute: ",
+        authorListening: "En écoute",
         authorAddingOne: "Ajout de la chanson à la liste",
         authorAddingMany: "Ajout de {{count}} chansons à la liste."
     },

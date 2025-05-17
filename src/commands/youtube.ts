@@ -22,21 +22,21 @@ export async function execute(interaction: CommandInteraction) {
 
     // Search
     const searchResult = await Roboto.musicService.search(query, MusicProvider.YOUTUBE);
-    if (!searchResult.success || !searchResult.result?.length) {
+    if (!searchResult.success || !searchResult.data?.length) {
       return interaction.editReply({
         content: i18n.t('responses.noresults', { query })
       });
     }
 
-    const firstTrack = searchResult.result[0];
+    const firstTrack = searchResult.data[0];
     const addResult = await Roboto.musicService.addToQueue(
         interaction,
-        isPlaylist ? searchResult.result : [firstTrack]
+        isPlaylist ? searchResult.data : [firstTrack]
     );
 
     const extra =
-        searchResult.result.length > 1
-            ? i18n.t('responses.andMore', { count: searchResult.result.length - 1 })
+        searchResult.data.length > 1
+            ? i18n.t('responses.andMore', { count: searchResult.data.length - 1 })
             : '';
 
     // Case: added and starts to sound immediately (code 10)

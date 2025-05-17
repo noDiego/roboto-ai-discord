@@ -8,10 +8,10 @@ import { extractJSON, getUnsupportedMessage, getUserName } from './utils';
 import { ResponseInput } from "openai/src/resources/responses/responses";
 import { GuildData } from "./interfaces/guild-data";
 
-export async function msgToAI(inputData: CommandInteraction | Message<boolean>, guildData: GuildData, commandMessage?: string): Promise<AIAnswer> {
+export async function msgToAI(inputData: CommandInteraction | Message<boolean>, guildData: GuildData, commandMessage?: string, omitPreviousMsgs = false): Promise<AIAnswer> {
 
   // Build the message array to send to AI
-  const messageList = await buildMessageArray(inputData, guildData, commandMessage);
+  const messageList = await buildMessageArray(inputData, guildData, commandMessage, omitPreviousMsgs);
 
   // Convert messages to OPENAI format
   const convertedMsgList = convertIaMessagesLang(messageList, AIProvider.OPENAI, generateAIPrompt(guildData.guildConfig));
@@ -23,15 +23,22 @@ export async function msgToAI(inputData: CommandInteraction | Message<boolean>, 
   return extractJSON(answerJSON) as AIAnswer;
 }
 
-async function buildMessageArray(inputData: BotInput, guildData: GuildData, commandMessage?: string): Promise<AiMessage[]>{
+async function buildMessageArray(inputData: BotInput, guildData: GuildData, commandMessage?: string, omitPreviousMsgs = false): Promise<AiMessage[]>{
 
   const resetCommands: string[] = ["-reset", "-r", "/reset"];
+  const channel : TextBasedChannel = inputData.channel as TextBasedChannel;
 
   /**Initialize messages array*/
   let messageList: AiMessage[] = [];
 
+  /**If Omit enabled**/
+  if(omitPreviousMsgs){
+    const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: 1}) as Collection<Snowflake, Message<boolean>>;
+    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage ?? channelMessagesCollection[0].content }], name: getUserName(inputData)});
+    return messageList;
+  }
+
   /**Get list of messages in channel **/
-  const channel : TextBasedChannel = inputData.channel as TextBasedChannel;
   const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: guildData.guildConfig.maxMessages}) as Collection<Snowflake, Message<boolean>>;
   let channelMessages = Array.from(channelMessagesCollection.values()).reverse();
 

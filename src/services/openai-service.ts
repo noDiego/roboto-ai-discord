@@ -108,6 +108,24 @@ export class OpenAIService {
     return responseResult.output_text;
   }
 
+  async customMsg(messages: ResponseInput, options?: any){
+
+    logger.info(`[OpenAI->customMsg] Sending custom Messages`);
+
+    const responseResult = await this.openAI.responses.create({
+      model: 'gpt-4.1-mini',
+      input: messages,
+      text: { format: { type: 'text' } },
+      reasoning: {},
+      temperature: 1,
+      max_output_tokens: options?.max_output_tokens || 3000,
+      top_p: 1,
+      store: true
+    });
+
+    return responseResult.output_text;
+  }
+
   /**
    * Generates one or more images from a text prompt using the configured image model.
    *
@@ -248,13 +266,13 @@ export class OpenAIService {
       content: [
         {
           type: "input_text",
-          text: `Prompt para generar la cancion titulada "${title}" : ${prompt}. (Solo debes retornar la letra, no el titulo)`
+          text: `Prompt para generar la canción ${title?`titulada "${title}"`:``}: ${prompt}.`
         }
       ]
     })
 
     const responseResult = await this.openAI.responses.create({
-      model: 'gpt-4.1-mini',
+      model: 'gpt-4.1',
       input: messages,
       temperature: 1,
       max_output_tokens: 2048,

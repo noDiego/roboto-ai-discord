@@ -15,7 +15,7 @@ export default {
     skip: "Skip"
   },
   musicplayer: {
-    authorListening: "Listening: ",
+    authorListening: "Listening",
     authorAddingOne: "Adding song to the list",
     authorAddingMany: "Adding {{count}} songs to the list."
   },

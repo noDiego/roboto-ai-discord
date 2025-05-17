@@ -7,7 +7,6 @@ import Roboto from "../roboto";
 import { temporalMsg } from "../utils";
 
 const audiosFolder = __dirname + "/../../assets/audios/";
-const lista = listaAudios();
 
 export const data = new SlashCommandBuilder()
   .setName('a')
@@ -20,7 +19,7 @@ export const data = new SlashCommandBuilder()
 
 export async function autocomplete(interaction: AutocompleteInteraction){
   const texto = interaction.options.get('nombre')!.value as string;
-  const sugerencias = lista.filter(m => m.toLowerCase().includes(texto.toLowerCase()));
+  const sugerencias = listaAudios().filter(m => m.toLowerCase().includes(texto.toLowerCase()));
   return interaction.respond(sugerencias.slice(0,24).map(m => ({name: m, value: m})));
 }
 

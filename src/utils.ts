@@ -310,3 +310,17 @@ export function downloadMp3(fileUrl, destPath): Promise<any> {
     }
   });
 }
+
+export function getAudioStream(url: string): Promise<Readable> {
+  return new Promise((resolve, reject) => {
+    https.get(url, (response) => {
+      if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+        resolve(response);
+      } else {
+        reject(new Error(`Failed to get stream, status code: ${response.statusCode}`));
+      }
+    }).on('error', (err) => {
+      reject(err);
+    });
+  });
+}

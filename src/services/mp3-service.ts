@@ -7,8 +7,10 @@ import { Readable } from "stream";
 import Roboto from "../roboto";
 import { BotInput } from "../interfaces/discord-interfaces";
 import { ActionResult } from "../interfaces/action-result";
+import { getAudioStream } from "../utils";
+import { CONFIG } from "../config";
 
-const mp3Folder = __dirname + "/../../assets/mp3/";
+const mp3Folder = CONFIG.mp3Folder;
 
 export function searchMP3(query: string): SongInfo[]{
     const mp3File = findAudioFile(query);
@@ -23,17 +25,24 @@ export function searchMP3(query: string): SongInfo[]{
 }
 
 export async function startMP3Playback(input: BotInput, song: SongInfo): Promise<ActionResult> {
-    const pathNormalized = path.normalize(mp3Folder + song.title + ".mp3");
+
     try {
-        const readedFile = readFileSync(pathNormalized);
-        const readableFile = Readable.from(readedFile);
-        await Roboto.discordService.playAudio(input, readableFile);
+        let source;
+        if (song.url) {
+            source = song.url ? await getAudioStream(song.url) : null;
+        } else {
+            const pathNormalized = path.normalize(mp3Folder + song.title + ".mp3");
+            const readedFile = readFileSync(pathNormalized);
+            source = Readable.from(readedFile);
+        }
+
+        await Roboto.discordService.playAudio(input, source);
         logger.info("[startMP3Playback] Playing: " + song.title);
-    }catch (error: any) {
+    } catch (error: any) {
         logger.error(`[startMP3Playback] Error playing MP3: ${error.message}`);
-        return { success: false, error: error, code: -1};
+        return {success: false, error: error, code: -1};
     }
-    return { success: true, code: 0, result: song.title };
+    return {success: true, code: 0, data: song.title};
 }
 
 function findAudioFile(searchTerm: string): string | null {

@@ -36,7 +36,7 @@ export default class YoutubeService {
 
       await Roboto.discordService.playAudio(input, stream.stream);
 
-      return { success: true, code: 0, result: song.title };
+      return { success: true, code: 0, data: song.title };
     } catch (error: any) {
       if(error.includes('Sign in to confirm'))
         return { success: false, error: error, code: -100};

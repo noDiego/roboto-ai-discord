@@ -35,8 +35,8 @@ export class MusicService {
         break;
     }
     if (maxResults) results = results.slice(0, maxResults);
-    if (results.length === 0) return {success: false, code: 2, resultMsg: 'No results'};
-    return { success: true, result: results, code: 0 };
+    if (results.length === 0) return {success: false, code: 2, message: 'No results'};
+    return { success: true, data: results, code: 0 };
   }
 
   async addToQueue(input: BotInput, songs: SongInfo[]): Promise<ActionResult>{
@@ -60,16 +60,16 @@ export class MusicService {
               .setThumbnail(songs[0].thumbnail);
 
       channel.send({embeds: [msgEmbd]});
-      return { success: true, result: songs, code: actualStatus == 'playing'? 10 : 11 };
+      return { success: true, data: songs, code: actualStatus == 'playing'? 10 : 11 };
     }
 
-    return { success: true, result: songs, code: 0 };
+    return { success: true, data: songs, code: 0 };
   }
 
-  async startPlayback(input: BotInput){
+  async startPlayback(input: BotInput): Promise<ActionResult> {
     const guildData = Roboto.getGuildData(input.guildId!);
 
-    if(guildData.songsQueue.length == 0) return { success: false, code: -1, resultMsg: 'No songs on queue'};
+    if(guildData.songsQueue.length == 0) return { success: false, code: -1, message: 'No songs on queue'};
 
     const song = guildData.songsQueue.shift();
     let result: ActionResult;
@@ -93,7 +93,7 @@ export class MusicService {
 
     guildData.currentSongInfo = song;
 
-    return { success: true, code: 0, replied: true, result: song };
+    return { success: true, code: 0, replied: true, data: song };
   }
 
   async showMusicPlayer(input: BotInput, song: SongInfo){

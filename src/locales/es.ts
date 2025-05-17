@@ -1,6 +1,6 @@
 export default {
   responses: {
-    thinking: "Pensando...",
+    thinking: "Pensanding...",
     noresults: "No se encontraron resultados para {{query}}",
     addedToQueue: "Añadido a la cola: \"{{title}}\"{{extra}}",
     andMore: " y {{count}} canciones más.",
@@ -12,11 +12,10 @@ export default {
     pause: "Pausar",
     play: "Reproducir",
     stop: "Detener",
-    skip: "Saltar",
-    listeningMsg: 'Escuchando'
+    skip: "Saltar"
   },
   musicplayer: {
-    authorListening: "Escuchando: ",
+    authorListening: "Escuchando",
     authorAddingOne: "Agregando canción a la lista",
     authorAddingMany: "Agregando {{count}} canciones a la lista."
   },
