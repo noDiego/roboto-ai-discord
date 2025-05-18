@@ -20,7 +20,7 @@ export default class YoutubeService {
   constructor() {
     this.tempDir = CONFIG.Youtube.tempDir;
     this.cleanTempFiles();
-    setInterval(()=> this.cleanTempFiles, 60 * 60 * 1000);
+    setInterval(()=> this.cleanTempFiles(), 60 * 60 * 1000);
   }
 
   public async startYTPlayback(input: BotInput, song: SongInfo): Promise<ActionResult> {
