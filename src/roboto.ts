@@ -242,8 +242,9 @@ class RobotoClass{
         const lyricData = JSON.parse(lyricGenerated);
         lyricData.lyrics = lyricData.lyrics.replace(/\(([^)]+)\)/g, '[$1]');
         lyricData.title = lyricData.title? lyricData.title : title;
+        let filteredStyles = Array.isArray(styles) ? styles.join(`, `): styles;
 
-        this.createSunoSong(styles, lyricData, inputData);
+        this.createSunoSong(filteredStyles, lyricData, inputData);
 
         return `La canción titulada "${lyricData.title}" esta en proceso de creación. Pidele al usuario que espere 1 minuto.`;
       },
