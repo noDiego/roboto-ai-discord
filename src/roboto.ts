@@ -6,7 +6,7 @@ import { OpenAIService } from './services/openai-service';
 import {
   bufferToStream,
   cleanMessage,
-  downloadMp3,
+  downloadMp3, formatLyrics,
   getAudioStream,
   imageToBase64,
   musicControlAction,
@@ -405,9 +405,9 @@ class RobotoClass{
       return channel.send(`Error creando la cancion: ${streamResult.error}`);
     }
 
-    logger.info(`Reproduciendo cancion creada ${streamResult.data[0].title}`);
+    logger.info(`Reproduciendo canción creada ${streamResult.data[0].title}`);
 
-    await channel.send(`**${streamResult.data[0].title}**\n\nLetra:\n\n${streamResult.data[0].prompt}`);
+    await channel.send(`**${streamResult.data[0].title}**\n\nLetra:\n\n${formatLyrics(streamResult.data[0].prompt)}`);
 
     Roboto.addAndPlaySongs([{
       provider: MusicProvider.MP3,
@@ -415,14 +415,7 @@ class RobotoClass{
       url: streamResult.data[0].streamAudioUrl,
       thumbnail: streamResult.data[0].imageUrl,
       duration: String(streamResult.data[0].duration)
-     },
-      {
-        provider: MusicProvider.MP3,
-        title: streamResult.data[1].title + ' v2',
-        url: streamResult.data[1].streamAudioUrl,
-        thumbnail: streamResult.data[1].imageUrl,
-        duration: String(streamResult.data[1].duration)
-      }], inputData);
+     }], inputData);
 
     // MP3 Process
     const mp3ResultData = await songService.waitSongsMP3(taskId);

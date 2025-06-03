@@ -39,7 +39,7 @@ export class SunoService {
     }
 
     public async startMusicGeneration(styles: string, lyricData: any, test = false): Promise<string> {
-        logger.info(`[Suno] Iniciando creacion de cancion "${lyricData.title}"`);
+        logger.info(`[Suno] Iniciando creacion de cancion "${lyricData.title}". Styles:"${styles}"`);
         try {
             const body: any = test ? {
                     "prompt": "A calm and relaxing piano track with soft melodies",
@@ -51,7 +51,7 @@ export class SunoService {
                 {
                     title: lyricData.title,
                     prompt: lyricData.lyrics,
-                    styles: styles,
+                    style: styles,
                     customMode: true,
                     instrumental: false,
                     model: 'V4_5',

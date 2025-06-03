@@ -59,7 +59,10 @@ export class MusicService {
               .setAuthor({name: 'Agregadas '+songs.length+' musiquitas a la lista.'})
               .setThumbnail(songs[0].thumbnail);
 
-      channel.send({embeds: [msgEmbd]});
+      channel.send({embeds: [msgEmbd]}).then(m=>{
+        temporalMsg(m, 30);
+      });
+
       return { success: true, data: songs, code: actualStatus == 'playing'? 10 : 11 };
     }
 

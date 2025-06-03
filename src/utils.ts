@@ -324,3 +324,15 @@ export function getAudioStream(url: string): Promise<Readable> {
     });
   });
 }
+
+export function formatLyrics(lyrics) {
+  return lyrics
+      // Quitar saltos de línea antes de [ y después de ]
+      .replace(/\s*\[\s*/g, '[')
+      .replace(/\s*\]/g, ']')
+      // Agregar salto de línea antes de cada [ si no hay uno ya
+      .replace(/\[([^\]]+)\]/g, '\n \n[$1]\n')
+      // Evitar líneas vacías múltiples
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+}
