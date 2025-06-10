@@ -28,7 +28,39 @@ class CorvoSvc {
     }
 
     async loadSongs(){
-        this._corvoSongs = await this.dbSvc.getCorvoSongs();
+        const dbSongs = await this.dbSvc.getCorvoSongs();
+
+        // 1. Obtén la lista de archivos mp3 del corvoFolder
+        const fs = await import('fs/promises'); // usa async fs para promesas
+        const files = await fs.readdir(corvoFolder);
+        const mp3Files = files.filter(file => file.endsWith('.mp3'));
+
+        // Para almacenar los que quedan al final
+        const validSongs: CorvoSong[] = [];
+
+        for (const sng of dbSongs) {
+            const baseName = sng.song_name?.trim() ?? '';
+
+            const matchingFile = mp3Files.find(f =>
+                normalizeQuery(f.replace('.mp3','')).includes(normalizeQuery(baseName))
+                || normalizeQuery(baseName).includes(normalizeQuery(f.replace('.mp3','')))
+            );
+
+            if (matchingFile) {
+                const fileBaseName = path.basename(matchingFile, '.mp3');
+
+                if (fileBaseName !== baseName) { // Si el nombre no coincide EXACTO, pero hay coincidencia, actualizamos título
+                    sng.song_name = fileBaseName;
+                }
+
+                validSongs.push(sng);
+            } else {
+                logger.info(`No se encontró canción "${baseName}" (no se encontró el archivo mp3 asociado)`);
+            }
+        }
+
+        // Actualiza el arreglo local
+        this._corvoSongs = validSongs;
     }
 
     searchCorvoSong(query: string): SongInfo[]{
@@ -44,28 +76,23 @@ class CorvoSvc {
     }
 
     async startCorvoPlayback(input: BotInput, song: SongInfo): Promise<ActionResult> {
-        const candidates = [
-            song.title,
-            `Corvo Team - ${song.title}`
-        ];
+
         let lastError = null;
 
-        for (const candidate of candidates) {
-            const pathNormalized = path.normalize(corvoFolder + candidate + ".mp3");
-            try {
-                const readedFile = readFileSync(pathNormalized);
-                const readableFile = Readable.from(readedFile);
-                await Roboto.discordService.playAudio(input, readableFile);
-                logger.info("[startMP3Playback] Playing: " + candidate);
-                return { success: true, code: 0, data: candidate };
-            } catch (error: any) {
-                logger.debug(`[ERROR] ${error.message}`);
-                lastError = error;
-            }
+        const pathNormalized = path.normalize(corvoFolder + song.title + ".mp3");
+        try {
+            const readedFile = readFileSync(pathNormalized);
+            const readableFile = Readable.from(readedFile);
+            await Roboto.discordService.playAudio(input, readableFile);
+            logger.info("[startMP3Playback] Playing: " + song.title);
+            return {success: true, code: 0, data: song.title};
+        } catch (error: any) {
+            logger.debug(`[ERROR] ${error.message}`);
+            lastError = error;
         }
 
         logger.error(`[startMP3Playback] Error playing MP3: ${lastError?.message}`);
-        return { success: false, error: lastError, code: -1 };
+        return {success: false, error: lastError, code: -1};
     }
 
 

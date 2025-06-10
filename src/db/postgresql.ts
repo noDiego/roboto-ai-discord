@@ -75,9 +75,8 @@ export class PostgresClient {
         const corvoSongList: CorvoSong[] = [];
 
         for (const row of rows) {
-            const songName = !row.song_name.startsWith('Corvo Team')? `Corvo Team - ${row.song_name}` : row.song_name;
             corvoSongList.push({
-                song_name: songName,
+                song_name: row.song_name,
                 song_description: row.song_description,
                 song_thumbnail: row.song_thumbnail
             });

@@ -89,7 +89,7 @@ export class MusicService {
         break;
     }
 
-    if(!result.success) return result;
+    if(!result.success) this.startPlayback(input);
 
     this.showMusicPlayer(input, song);
     this.setIdleListener(input);
