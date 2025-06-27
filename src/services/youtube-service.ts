@@ -133,7 +133,14 @@ export default class YoutubeService {
       results.push(this.createSongInfo(playlistInfo, url));
     }
 
-    return results;
+    const seen = new Set<string>();
+    const uniqueResults = results.filter(song => {
+      if (seen.has(song.url)) return false;
+      seen.add(song.url);
+      return true;
+    });
+
+    return uniqueResults;
   }
 
   private async handleSingleVideo(url: string): Promise<SongInfo[]> {
