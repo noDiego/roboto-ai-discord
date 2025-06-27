@@ -19,13 +19,13 @@ export class MusicService {
     this.youtubeService = new YoutubeService();
   }
 
-  async search(query: string, provider: MusicProvider, maxResults?: number): Promise<ActionResult<SongInfo[]>>{
+  async search(query: string, provider: MusicProvider, maxResults?: number, isPlayList = false): Promise<ActionResult<SongInfo[]>>{
 
     let results: SongInfo[] = [];
 
     switch (provider) {
       case 'YOUTUBE':
-        results = await this.youtubeService.search(query);
+        results = await this.youtubeService.search(query, isPlayList);
         break;
       case 'MP3':
         results = searchMP3(query);

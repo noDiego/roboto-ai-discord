@@ -33,10 +33,10 @@ export const AITools: Array<Tool> = [
                 },
                 maxResults: { type: ["integer","null"], description: "Maximum number of videos to return (default 10). OPTIONAL", nullable: true }
             },
-            required: ["query", "maxResults"],
+            required: ["query"],
             additionalProperties: false,
         },
-        strict: true
+        strict: false
     },
     {
         type: "function",
@@ -69,7 +69,7 @@ export const AITools: Array<Tool> = [
                                 nullable: true
                             }
                         },
-                        required: ["provider","url", "title","thumbnail"],
+                        required: ["provider","url", "title"],
                         additionalProperties: false
                     }
                 }
@@ -77,7 +77,7 @@ export const AITools: Array<Tool> = [
             required: ["songs"],
             additionalProperties: false
         },
-        strict: true
+        strict: false
     },
     {
         type: "function",

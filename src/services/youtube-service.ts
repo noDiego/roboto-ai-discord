@@ -96,9 +96,9 @@ export default class YoutubeService {
     return {stream: Readable.from(readedFile)};
   }
 
-  public async search(searchTerm: string): Promise<SongInfo[]> {
+  public async search(searchTerm: string, isPlaylist = false): Promise<SongInfo[]> {
     try {
-      if (ytstream.validateURL(searchTerm)) return this.handleYouTubeUrl(searchTerm);
+      if (ytstream.validateURL(searchTerm)) return this.handleYouTubeUrl(searchTerm, isPlaylist);
       return this.searchYouTubeVideos(searchTerm);
     } catch (error) {
       logger.error(`[YoutubeService] Error fetching YouTube results: ${error}`);
@@ -106,9 +106,7 @@ export default class YoutubeService {
     }
   }
 
-  private async handleYouTubeUrl(url: string): Promise<SongInfo[]> {
-    const isPlaylist = url.includes('list=');
-
+  private async handleYouTubeUrl(url: string, isPlaylist = false): Promise<SongInfo[]> {
     if (isPlaylist) return this.handlePlaylist(url);
     return this.handleSingleVideo(url);
   }

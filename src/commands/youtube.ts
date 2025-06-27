@@ -10,18 +10,22 @@ export const data = new SlashCommandBuilder()
   .addStringOption(option =>
     option.setName('query')
       .setDescription(i18n.t('commands.youtube.queryDescription'))
-      .setRequired(true));
+      .setRequired(true))
+  .addBooleanOption(isPlaylist =>
+      isPlaylist.setName('isplaylist')
+      .setDescription('Es una Playlist')
+      .setRequired(false));
 
 export async function execute(interaction: CommandInteraction) {
   try {
     await interaction.deferReply();
 
     const query = interaction.options.get('query').value as string;
-    const isPlaylist = query.includes('list=') && query.startsWith('http');
+    const isPlaylist = interaction.options.get('isplaylist').value as boolean;
     logger.info(`Received search for YouTube: "${query}"`);
 
     // Search
-    const searchResult = await Roboto.musicService.search(query, MusicProvider.YOUTUBE);
+    const searchResult = await Roboto.musicService.search(query, MusicProvider.YOUTUBE, 50, isPlaylist);
     if (!searchResult.success || !searchResult.data?.length) {
       return interaction.editReply({
         content: i18n.t('responses.noresults', { query })

@@ -336,3 +336,28 @@ export function formatLyrics(lyrics) {
       .replace(/\n{2,}/g, '\n')
       .trim();
 }
+
+export function fechaHoraChilena(date = new Date()) {
+
+  // Obtener la fecha y hora en la zona horaria de Chile
+  const options: any = {
+    timeZone: 'America/Santiago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  };
+
+  // Formatear como partes para manipular fácilmente
+  const parts: any = new Intl.DateTimeFormat('en-CA', options).formatToParts(date)
+      .reduce((acc, part) => {
+        if (part.type !== 'literal') acc[part.type] = part.value;
+        return acc;
+      }, {});
+
+  // Formar el string final
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+}

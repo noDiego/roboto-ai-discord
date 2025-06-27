@@ -4,7 +4,7 @@ import { AIAnswer, AIContent, AiMessage, AIProvider, AIRole } from './interfaces
 import Roboto from './roboto';
 import { AITools } from './services/functions';
 import { BotInput } from './interfaces/discord-interfaces';
-import { extractJSON, getUnsupportedMessage, getUserName } from './utils';
+import { extractJSON, fechaHoraChilena, getUnsupportedMessage, getUserName } from './utils';
 import { ResponseInput } from "openai/src/resources/responses/responses";
 import { GuildData } from "./interfaces/guild-data";
 
@@ -34,7 +34,7 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
   /**If Omit enabled**/
   if(omitPreviousMsgs){
     const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: 1}) as Collection<Snowflake, Message<boolean>>;
-    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage ?? channelMessagesCollection[0].content }], name: getUserName(inputData)});
+    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage ?? channelMessagesCollection[0].content, date: fechaHoraChilena()}], name: getUserName(inputData)});
     return messageList;
   }
 
@@ -61,8 +61,8 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
     const name = getUserName(channelMsg);
 
     const content: Array<AIContent> = [];
-    if(isImage) content.push({type: 'image',  value: attachment.url, media_type: <string> attachment.contentType, image_id: channelMsg.id});
-    if(channelMsg.content.length > 0) content.push({ type: 'text', value: channelMsg.content });
+    if(isImage) content.push({type: 'image',  value: attachment.url, media_type: <string> attachment.contentType, image_id: channelMsg.id, date: fechaHoraChilena(channelMsg.createdAt)});
+    if(channelMsg.content.length > 0) content.push({ type: 'text', value: channelMsg.content, date: fechaHoraChilena(channelMsg.createdAt) });
     if(content.length == 0) continue;
 
     messageList.push({role: rol, content: content, name: name});
@@ -73,7 +73,7 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
   if (messageList.length > 1 && messageList[messageList.length - 1].role === AIRole.ASSISTANT) messageList.pop();
 
   if (commandMessage){
-    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage }], name: getUserName(inputData)});
+    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage, date: fechaHoraChilena() }], name: getUserName(inputData)});
   }
 
   return messageList;
@@ -90,7 +90,7 @@ function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, syste
           const fromBot = msg.role == AIRole.ASSISTANT;
           if (['text', 'audio'].includes(c.type))  gptContent.push({
             type: fromBot?'output_text':'input_text',
-            text: JSON.stringify({message: msgContent, author: msg.name, type: c.type, imageId: c.image_id, response_format:'json_object'}) });
+            text: JSON.stringify({message: msgContent, author: msg.name, type: c.type, imageId: c.image_id, date: c.date, response_format:'json_object'}) });
           if (['image'].includes(c.type)){
             gptContent.push({ type: 'input_image', image_url: c.value });
             gptContent.push({
@@ -98,7 +98,8 @@ function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, syste
               text: JSON.stringify({
                 image_id: c.image_id,
                 author: msg.name,
-                note: 'refer to this image by its image_id'
+                note: 'refer to this image by its image_id',
+                date: c.date
               })
             });
           }

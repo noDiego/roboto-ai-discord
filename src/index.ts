@@ -3,7 +3,8 @@ import { deployCommands } from './deploy-commands';
 import { CONFIG } from './config';
 import logger from './logger';
 import Roboto from './roboto';
-import { handleInteractionError } from "./utils";
+import { fechaHoraChilena, handleInteractionError } from "./utils";
+import YoutubeService from "./services/youtube-service";
 
 const client = new Client({
   intents: [  GatewayIntentBits.Guilds,
@@ -36,3 +37,10 @@ client.on('messageCreate', async (message) => {
 });
 
 client.login(CONFIG.botToken);
+
+
+async function test(){
+  console.log(fechaHoraChilena());
+}
+
+test();
