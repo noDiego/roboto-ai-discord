@@ -361,3 +361,24 @@ export function fechaHoraChilena(date = new Date()) {
   // Formar el string final
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
+
+export function normalizeYouTubeURL(url: string): string {
+  try {
+    const parsed = new URL(url.trim());
+
+    if (parsed.hostname === "youtu.be") {
+      const videoId = parsed.pathname.slice(1);
+      let newUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      if (parsed.searchParams && [...parsed.searchParams].length > 0) {
+        for (const [key, value] of parsed.searchParams.entries()) {
+          if (key === 'v') continue;
+          newUrl += `&${key}=${encodeURIComponent(value)}`;
+        }
+      }
+      return newUrl;
+    }
+    return url;
+  } catch (e) {
+    return url;
+  }
+}

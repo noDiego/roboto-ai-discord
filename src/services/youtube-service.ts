@@ -10,7 +10,7 @@ import { join } from "path";
 import { Readable } from "stream";
 import { youtube } from 'scrape-youtube';
 import ytstream from 'yt-stream';
-import { cleanFileName, sleep } from "../utils";
+import { cleanFileName, normalizeYouTubeURL, sleep } from "../utils";
 
 export default class YoutubeService {
 
@@ -98,7 +98,10 @@ export default class YoutubeService {
 
   public async search(searchTerm: string, isPlaylist = false): Promise<SongInfo[]> {
     try {
-      if (ytstream.validateURL(searchTerm)) return this.handleYouTubeUrl(searchTerm, isPlaylist);
+      if (ytstream.validateURL(searchTerm)) {
+        const normalizedYTUrl = normalizeYouTubeURL(searchTerm);
+        return this.handleYouTubeUrl(normalizedYTUrl, isPlaylist);
+      }
       return this.searchYouTubeVideos(searchTerm);
     } catch (error) {
       logger.error(`[YoutubeService] Error fetching YouTube results: ${error}`);
