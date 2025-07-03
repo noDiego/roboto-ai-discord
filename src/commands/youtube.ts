@@ -21,7 +21,7 @@ export async function execute(interaction: CommandInteraction) {
     await interaction.deferReply();
 
     const query = interaction.options.get('query').value as string;
-    const isPlaylist = interaction.options.get('isplaylist').value as boolean;
+    const isPlaylist = interaction.options.get('isplaylist')?.value as boolean;
     logger.info(`Received search for YouTube: "${query}"`);
 
     // Search
