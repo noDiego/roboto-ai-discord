@@ -100,7 +100,7 @@ export default class YoutubeService {
     try {
       if (ytstream.validateURL(searchTerm)) {
         const normalizedYTUrl = normalizeYouTubeURL(searchTerm);
-        return this.handleYouTubeUrl(normalizedYTUrl, isPlaylist);
+        return this.handleYouTubeUrl(isPlaylist? normalizedYTUrl:normalizedYTUrl.split('&list')[0], isPlaylist);
       }
       return this.searchYouTubeVideos(searchTerm);
     } catch (error) {
