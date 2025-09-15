@@ -30,7 +30,7 @@ export class OpenAIService {
       reasoning: {},
       tools: tools,
       temperature: 1,
-      max_output_tokens: 2048,
+      max_output_tokens: 12048,
       top_p: 1,
       store: true
     });
