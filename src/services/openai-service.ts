@@ -76,7 +76,7 @@ export class OpenAIService {
     logger.info(`[OpenAI->webSearch] Searching "${searchQuery}"`);
 
     const responseResult = await this.openAI.responses.create({
-      model: 'gpt-4.1-mini',
+      model: 'gpt-5',
       input: [{
         role: "user",
         content: [
@@ -87,20 +87,17 @@ export class OpenAIService {
         ]
       }],
       text: { format: { type: 'text' } },
-      reasoning: {},
+      reasoning: { effort: 'medium', summary: 'auto'},
       tools: [
         {
-          type: "web_search_preview",
+          type: "web_search",
           user_location: {
             type: "approximate"
           },
           search_context_size: "medium"
         }
       ],
-      temperature: 1,
-      max_output_tokens: 2048,
-      top_p: 1,
-      store: true
+      store: false
     });
 
     return responseResult.output_text;
