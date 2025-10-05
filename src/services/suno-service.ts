@@ -17,7 +17,7 @@ export interface GenerateMusicOptions {
     customMode?: boolean;
     instrumental?: boolean;
     style?: string;
-    model?: 'V3_5' | 'V4' | 'V4_5';
+    model?: 'V3_5' | 'V4' | 'V4_5' | 'V5';
     negativeTags?: string;
 }
 
@@ -54,7 +54,7 @@ export class SunoService {
                     style: styles,
                     customMode: true,
                     instrumental: false,
-                    model: 'V4_5',
+                    model: 'V5',
                     callBackUrl: 'https://api.example.com/callback'
                 };
 

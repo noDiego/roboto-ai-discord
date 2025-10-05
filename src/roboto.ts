@@ -157,7 +157,7 @@ class RobotoClass{
       web_search: async (args) => {
         const searchResult = await this._openAI.webSearch(args.query);
         if (!searchResult)
-          return `No song was found on YouTube that matches: "${args.query}".`;
+          return `No results for search: "${args.query}".`;
         return `Search result: "${searchResult}"`;
       },
 
