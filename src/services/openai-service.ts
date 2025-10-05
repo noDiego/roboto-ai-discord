@@ -78,8 +78,39 @@ export class OpenAIService {
     logger.info(`[OpenAI->webSearch] Searching "${searchQuery}"`);
 
     const responseResult = await this.openAI.responses.create({
-      model: 'gpt-5',
-      input: [{
+      model: 'gpt-4.1-mini',
+      input: [
+          {
+        role: "system",
+        content: [
+          {
+            type: "input_text",
+            text: "Rol: Buscador de información web.\n" +
+                "\n" +
+                "Instrucciones:\n" +
+                "- Cada mensaje es una consulta de búsqueda.\n" +
+                "- Busca en la web y extrae información relevante, precisa y actualizada.\n" +
+                "- Organiza en secciones claras con listas cuando aplique.\n" +
+                "- Incluye enlaces directos a las fuentes en cada punto.\n" +
+                "- Sin tono conversacional ni opiniones. Sin introducciones ni conclusiones. Solo información objetiva.\n" +
+                "\n" +
+                "Formato de salida:\n" +
+                "Resultados sobre [tema]\n" +
+                "\n" +
+                "1. Definición y contexto\n" +
+                "- [Resumen breve]\n" +
+                "Fuente: [URL]\n" +
+                "\n" +
+                "2. Aspectos relevantes / Características\n" +
+                "- [Punto principal]\n" +
+                "Fuente: [URL]\n" +
+                "\n" +
+                "3. Noticias recientes / Actualizaciones\n" +
+                "- [Breve descripción]\n" +
+                "Fuente: [URL]\n"
+          }
+        ]
+      },{
         role: "user",
         content: [
           {
@@ -88,18 +119,15 @@ export class OpenAIService {
           }
         ]
       }],
-      reasoning: {
-        "effort": "medium",
-        "summary": "auto"
-      },
       store: false,
       stream: false,
       text: {
         "format": {
           "type": "text"
         },
-        verbosity: "medium"
+        verbosity: "low"
       },
+      temperature: 1,
       tools: [
         {
           type: "web_search",
