@@ -4,7 +4,7 @@ import fs, { readFileSync } from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import Roboto from "../roboto";
-import { temporalMsg } from "../utils";
+import { commandInteractionReply, temporalMsg } from "../utils";
 
 const audiosFolder = __dirname + "/../../assets/audios/";
 
@@ -29,7 +29,8 @@ export async function execute(interaction: any) {
 
   if (!nombre){
     const mp3List = listaMp3();
-    interaction.reply({ embeds: [mp3List], flags: 'Ephemeral' });
+    await interaction.deleteReply();
+    interaction.followUp({ embeds: [mp3List], flags: 'Ephemeral' });
     return;
   }
 
@@ -41,7 +42,7 @@ export async function execute(interaction: any) {
       .setTitle('Escuchando: '+nombre)
       .setAuthor({name: 'Audios'});
 
-    const reply = await interaction.reply({embeds:[msgEmbd]});
+    const reply = await commandInteractionReply(interaction, {embeds:[msgEmbd]})
     temporalMsg(reply,2);
   }catch (e){
     logger.error(e);
@@ -58,7 +59,7 @@ export async function playMp3(interaction: CommandInteraction, nombre: string) {
     logger.info("Playing Audio: " + pathNormalized);
   } catch (e:any) {
     logger.error(`Error con audio "${nombre}": ${e.message} `);
-    const msg = await interaction.reply(`No hay audios con el nombre "${nombre}"`);
+    const msg = await interaction.editReply(`No hay audios con el nombre "${nombre}"`);
   }
 }
 

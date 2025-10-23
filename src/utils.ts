@@ -1,4 +1,12 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, GuildTextBasedChannel, Interaction, Message } from 'discord.js';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  CommandInteraction,
+  GuildTextBasedChannel,
+  Interaction, InteractionEditReplyOptions, InteractionReplyOptions,
+  Message, MessagePayload
+} from 'discord.js';
 import { BotInput, MusicAction } from './interfaces/discord-interfaces';
 import { CONFIG } from "./config";
 import logger from "./logger";
@@ -235,7 +243,7 @@ export function musicControlAction(action: string): MusicAction{
 
 export function handleInteractionError(interaction: Interaction, e: any){
   logger.error(`Error processing interaction : ${e.message}`)
-  if(interaction.isRepliable()) return interaction.reply({content: i18n.t('responses.error'), ephemeral: true});
+  if(interaction && interaction.isRepliable()) return interaction.reply({content: i18n.t('responses.error'), ephemeral: true});
   return;
 }
 
@@ -381,4 +389,9 @@ export function normalizeYouTubeURL(url: string): string {
   } catch (e) {
     return url;
   }
+}
+
+export function commandInteractionReply(interaction: CommandInteraction, options: string | MessagePayload | InteractionEditReplyOptions | InteractionReplyOptions): Promise<Message<boolean>>{
+  if(interaction.deferred) return interaction.editReply(options as any)
+  return interaction.reply(options as any) as any;
 }

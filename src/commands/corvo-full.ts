@@ -8,7 +8,6 @@ export const data = new SlashCommandBuilder()
     .setDescription("Escucha todas las Corvo cancionestianes");
 
 export async function execute(interaction: CommandInteraction) {
-  await interaction.deferReply();
   let songList: SongInfo[] = CorvoService.corvoSongs.map(song => {
      return {
        provider: MusicProvider.CORVO,

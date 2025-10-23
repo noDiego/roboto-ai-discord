@@ -38,8 +38,6 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: CommandInteraction) {
 
-  await interaction.deferReply();
-
   const voice = interaction.options.get('voz')!.value as string;
   let texto = interaction.options.get('texto')!.value as string;
 

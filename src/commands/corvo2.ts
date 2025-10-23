@@ -24,8 +24,6 @@ export async function autocomplete(interaction: AutocompleteInteraction){
 
 export async function execute(interaction: any) {
 
-    await interaction.deferReply();
-
     const titulo = interaction.options.getString('titulo');
 
     await Roboto.addAndPlaySongs([{

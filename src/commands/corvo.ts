@@ -20,15 +20,18 @@ export async function autocomplete(interaction: AutocompleteInteraction){
 }
 
 export async function execute(interaction: any) {
-  const title = interaction.options.getString('titulo');
-  interaction.deferReply();
+  try{
+    const title = interaction.options.getString('titulo');
 
-  const guild = interaction.guild;
+    const guild = interaction.guild;
 
-  const botResponseMsg = await msgToAI(interaction, Roboto.getGuildData(guild.id), `Pon la cancion de Corvo llamada "${title}"`, true);
-  if (!botResponseMsg) return;
+    const botResponseMsg = await msgToAI(interaction, Roboto.getGuildData(guild.id), `Pon la canción de Corvo que tiene un titulo como "${title}"`, true);
+    if (!botResponseMsg) return;
 
-  return interaction.editReply(botResponseMsg.message);
+    return interaction.editReply(botResponseMsg.message);
+  }catch (e){
+    return interaction.editReply('Tuve un error con lo que me pediste ):');
+  }
 }
 
 function corvoList(): string[] {

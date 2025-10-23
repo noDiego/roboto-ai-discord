@@ -7,8 +7,14 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(inputData: CommandInteraction) {
 
-    // Roboto.createSunoSong('lo-fi', 'test',inputData);
+    await inputData.deferReply({ephemeral: true});
 
-    return inputData.reply('OK');
+    setTimeout(() => {
+        inputData.deleteReply();
+        inputData.followUp({
+            content: "public message",
+            ephemeral: false
+        })
+    }, 3000)
 }
 

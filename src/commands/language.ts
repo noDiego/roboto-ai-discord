@@ -24,9 +24,9 @@ export async function execute(interaction: CommandInteraction) {
   if (locale && availableLanguages.includes(locale)) {
     i18n.setLocale(locale);
     CONFIG.locale = locale;
-    return interaction.reply(`Language changed to: ${locale}`);
+    return interaction.editReply(`Language changed to: ${locale}`);
   } else {
-    return interaction.reply('Invalid language selected.');
+    return interaction.editReply('Invalid language selected.');
   }
 }
 

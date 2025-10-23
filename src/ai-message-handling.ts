@@ -7,6 +7,7 @@ import { BotInput } from './interfaces/discord-interfaces';
 import { extractJSON, fechaHoraChilena, getUnsupportedMessage, getUserName } from './utils';
 import { ResponseInput } from "openai/src/resources/responses/responses";
 import { GuildData } from "./interfaces/guild-data";
+import logger from "./logger";
 
 export async function msgToAI(inputData: CommandInteraction | Message<boolean>, guildData: GuildData, commandMessage?: string, omitPreviousMsgs = false): Promise<AIAnswer> {
 
@@ -52,20 +53,25 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
   /**Organize messages to match AI expected structure**/
   for(const channelMsg of channelMessages.reverse()){
 
-    const attachment = channelMsg.attachments.first();
-    const isImage = attachment && attachment.contentType?.includes('image');
+    try{
+      const attachment = channelMsg.attachments.first();
+      const isImage = attachment && attachment.contentType?.includes('image');
 
-    if((channelMsg.content == '') && !isImage) continue;
+      const rol = (!channelMsg.author.bot || isImage) ? AIRole.USER : AIRole.ASSISTANT;
+      const name = getUserName(channelMsg);
 
-    const rol = (!channelMsg.author.bot || isImage) ? AIRole.USER : AIRole.ASSISTANT;
-    const name = getUserName(channelMsg);
+      if((channelMsg.content == '') && !isImage) continue;
 
-    const content: Array<AIContent> = [];
-    if(isImage) content.push({type: 'image',  value: attachment.url, media_type: <string> attachment.contentType, image_id: channelMsg.id, date: fechaHoraChilena(channelMsg.createdAt)});
-    if(channelMsg.content.length > 0) content.push({ type: 'text', value: channelMsg.content, date: fechaHoraChilena(channelMsg.createdAt) });
-    if(content.length == 0) continue;
+      const content: Array<AIContent> = [];
+      if(isImage) content.push({type: 'image',  value: attachment.url, media_type: <string> attachment.contentType, image_id: channelMsg.id, date: fechaHoraChilena(channelMsg.createdAt)});
+      if(channelMsg.content.length > 0) content.push({ type: 'text', value: channelMsg.content, date: fechaHoraChilena(channelMsg.createdAt) });
+      if(content.length == 0) continue;
 
-    messageList.push({role: rol, content: content, name: name});
+      messageList.push({role: rol, content: content, name: name});
+    }catch(e){
+      logger.error(e.message);
+      messageList.push({role: AIRole.USER, name:'User', content: [{type: 'text', value: `<Error Reading Message>`, date: fechaHoraChilena(channelMsg.createdAt)}]});
+    }
   }
 
   messageList = messageList.reverse();

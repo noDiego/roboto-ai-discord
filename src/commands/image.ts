@@ -13,8 +13,6 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: any) {
 
-    interaction.deferReply();
-
     const guild = interaction.guild;
     const imgPrompt = interaction.options.getString('prompt');
 

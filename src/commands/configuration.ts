@@ -56,7 +56,8 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: any) {
     const guildId = interaction.guildId;
     if (!guildId) {
-        return interaction.reply({
+        await interaction.deleteReply();
+        return interaction.followUp({
             content: i18n.t("commands.config.responses.noGuild"),
             flags: [MessageFlags.Ephemeral],
         });
@@ -109,7 +110,8 @@ export async function execute(interaction: any) {
                     inline: true,
                 }
             );
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.deleteReply();
+        return interaction.followUp({ embeds: [embed], ephemeral: true });
     }
 
     // Actualizar la configuración
@@ -150,5 +152,6 @@ export async function execute(interaction: any) {
         )
         .setTimestamp();
 
-    return interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.deleteReply();
+    return interaction.followUp({ embeds: [embed], ephemeral: true });
 }

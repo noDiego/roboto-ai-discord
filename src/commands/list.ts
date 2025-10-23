@@ -14,7 +14,8 @@ export async function execute(interaction: CommandInteraction) {
       .setTitle(i18n.t('commands.list.title'))
       .setDescription(songList != "" ? songList : i18n.t('commands.list.emptyMsg'))
 
-  return await interaction.reply({embeds: [msgEmbd], flags: 'Ephemeral'});
+  await interaction.deleteReply();
+  return await interaction.followUp({embeds: [msgEmbd], flags: 'Ephemeral'});
 }
 
 export function buildSongList(interaction: CommandInteraction) {

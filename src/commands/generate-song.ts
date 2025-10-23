@@ -27,8 +27,6 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: any) {
 
-    await interaction.deferReply();
-
     const prompt = interaction.options.getString('prompt-letra');
     const styles = interaction.options.getString('styles');
     let title = interaction.options.getString('titulo');

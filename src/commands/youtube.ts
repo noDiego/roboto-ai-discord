@@ -18,7 +18,6 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: CommandInteraction) {
   try {
-    await interaction.deferReply();
 
     const query = interaction.options.get('query').value as string;
     const isPlaylist = interaction.options.get('isplaylist')?.value as boolean;

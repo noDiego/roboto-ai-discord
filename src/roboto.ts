@@ -62,6 +62,7 @@ class RobotoClass{
     const guildData = this.getGuildData(interaction.guildId, interaction.guild?.name);
     if (interaction.isCommand()) {
       try {
+        await interaction.deferReply();
         while(guildData.isBusy){
           await sleep(1000);
         }
