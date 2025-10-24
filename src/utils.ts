@@ -17,6 +17,27 @@ import path from "node:path";
 import * as http from "node:http";
 import fs from "fs";
 
+export function getFormattedDate(date?: Date, includeOffset = false) {
+  const now = date || new Date();
+
+  const year = now.getFullYear();
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const day = now.getDate().toString().padStart(2, '0');
+
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const seconds = now.getSeconds().toString().padStart(2, '0');
+
+  const offsetMinutes = now.getTimezoneOffset();
+  const offsetSign = offsetMinutes > 0 ? '-' : '+';
+  const absOffsetMinutes = Math.abs(offsetMinutes);
+  const offsetHours = Math.floor(absOffsetMinutes / 60).toString().padStart(2, '0');
+  const offsetMins = (absOffsetMinutes % 60).toString().padStart(2, '0');
+  const offsetString = `${offsetSign}${offsetHours}:${offsetMins}`;
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}${includeOffset?offsetString:''}`;
+}
+
 export function getUserName(msg: BotInput): string | null {
   if (msg instanceof Message) {
     return msg.member?.nickname ||
