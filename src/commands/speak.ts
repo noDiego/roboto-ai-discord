@@ -36,7 +36,7 @@ export const data = new SlashCommandBuilder()
       .setDescription('Texto a pronunciar')
       .setRequired(true));
 
-export async function execute(interaction: CommandInteraction) {
+export async function execute(interaction: any) {
 
   const voice = interaction.options.get('voz')!.value as string;
   let texto = interaction.options.get('texto')!.value as string;

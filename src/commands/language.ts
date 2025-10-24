@@ -18,7 +18,7 @@ export const data = new SlashCommandBuilder()
       )
   );
 
-export async function execute(interaction: CommandInteraction) {
+export async function execute(interaction: any) {
   const locale = interaction.options.get('locale')?.value as string;
 
   if (locale && availableLanguages.includes(locale)) {

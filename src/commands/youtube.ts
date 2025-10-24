@@ -16,7 +16,7 @@ export const data = new SlashCommandBuilder()
       .setDescription('Es una Playlist')
       .setRequired(false));
 
-export async function execute(interaction: CommandInteraction) {
+export async function execute(interaction: any) {
   try {
 
     const query = interaction.options.get('query').value as string;
