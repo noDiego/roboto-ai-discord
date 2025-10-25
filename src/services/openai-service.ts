@@ -124,8 +124,8 @@ export class OpenAIService {
       text: {
         "format": {
           "type": "text"
-        },
-        verbosity: "low"
+        }
+        //verbosity: "low"
       },
       temperature: 1,
       tools: [
