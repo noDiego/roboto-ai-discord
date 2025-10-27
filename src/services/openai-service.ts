@@ -78,7 +78,6 @@ export class OpenAIService {
     logger.info(`[OpenAI->webSearch] Searching "${searchQuery}"`);
 
     const responseResult = await this.openAI.responses.create({
-      model: 'gpt-4.1-mini',
       input: [
           {
         role: "system",
@@ -119,13 +118,18 @@ export class OpenAIService {
           }
         ]
       }],
+      model: 'gpt-5-mini',
+      reasoning: {
+        effort:'low',
+        summary:'auto'
+      },
       store: false,
       stream: false,
       text: {
-        "format": {
-          "type": "text"
-        }
-        //verbosity: "low"
+        format: {
+          type: "text"
+        },
+        verbosity: "low"
       },
       temperature: 1,
       tools: [
