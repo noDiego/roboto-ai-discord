@@ -350,6 +350,7 @@ class RobotoClass{
       // const ttsStream = ttsProvider == 'OPENAI' ? await this.openAI.speechStream(cleanedMsg, instructions, voice) :
       //     await this._elevenLabsService.ttsStream(msgToSay, voice ?? 'cain');
       const ttsStream = await this._elevenLabsService.ttsStream(msgToSay, voice ?? 'cain');
+      await sleep(1500);
       return await this.pauseAndPlay(input, ttsStream);
     } catch (error) {
       logger.error(`Error in speechStream: ${error.message}`);
