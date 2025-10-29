@@ -147,43 +147,76 @@ export const AITools: Array<Tool> = [
         },
         strict: true
     },
+    // {
+    //     type: "function",
+    //     name: "generate_speech",
+    //     description: "Generates an voice audio from text using the OpenAI TTS model. Instructions for tone and style can be customized, and a voice can optionally be selected.",
+    //     parameters: {
+    //         type: "object",
+    //         properties: {
+    //             input: {
+    //                 type: "string",
+    //                 description: "The text to be converted into audio."
+    //             },
+    //             instructions: {
+    //                 type: "string",
+    //                 description: "Instructions for the TTS model regarding intonation and style, such as emotion, tone, or accent."
+    //             },
+    //             voice: {
+    //                 type: ["string", "null"],
+    //                 enum: [
+    //                     "alloy",
+    //                     "ash",
+    //                     "ballad",
+    //                     "coral",
+    //                     "echo",
+    //                     "fable",
+    //                     "onyx",
+    //                     "nova",
+    //                     "sage",
+    //                     "shimmer",
+    //                     "verse"
+    //                 ],
+    //                 description: "The name of the voice to use (e.g., 'coral', 'alloy', 'ash', 'onyx'). Optional."
+    //             }
+    //         },
+    //         required: ["input", "instructions", "voice"],
+    //         additionalProperties: false
+    //     },
+    //     strict: true
+    // },
     {
         type: "function",
         name: "generate_speech",
-        description: "Generates an voice audio from text using the OpenAI TTS model. Instructions for tone and style can be customized, and a voice can optionally be selected.",
+        description: "Generates a voice audio from text using the ElevenLabs TTS model. Supports inline audio tags to control emotion, reactions, volume, pacing, and more. Tags like [EXCITED], [WHISPERING], [PAUSE], [LAUGHS], etc., can be placed in the text to influence delivery. Instructions for tone and style can be customized, and a voice can optionally be selected.",
         parameters: {
             type: "object",
             properties: {
                 input: {
                     type: "string",
-                    description: "The text to be converted into audio."
-                },
-                instructions: {
-                    type: "string",
-                    description: "Instructions for the TTS model regarding intonation and style, such as emotion, tone, or accent."
+                    description: "The text to be converted into audio. You should use tags such " +
+                        "Emotional tone: [EXCITED], [NERVOUS], [FRUSTRATED], [TIRED]\n" +
+                        "Reactions: [GASP], [SIGH], [LAUGHS], [GULPS]\n" +
+                        "Volume & energy: [WHISPERING], [SHOUTING], [QUIETLY], [LOUDLY]\n" +
+                        "Pacing & rhythm: [PAUSES], [STAMMERS], [RUSHED]." +
+                        "To change emotion and rhythm in specific parts of the text." +
+                        "Example: [drawn out] Así queeee... estás diciendo... [tono sospechoso] ¿no te comiste la última porción?"
                 },
                 voice: {
                     type: ["string", "null"],
                     enum: [
-                        "alloy",
-                        "ash",
-                        "ballad",
-                        "coral",
-                        "echo",
-                        "fable",
-                        "onyx",
-                        "nova",
-                        "sage",
-                        "shimmer",
-                        "verse"
+                        "cain",
+                        "darkayser",
+                        "piñera"
                     ],
-                    description: "The name of the voice to use (e.g., 'coral', 'alloy', 'ash', 'onyx'). Optional."
+                    description: "The name of the voice to use. Default: cain. OPTIONAL",
+                    nullable: true
                 }
             },
-            required: ["input", "instructions", "voice"],
+            required: ["input"],
             additionalProperties: false
         },
-        strict: true
+        strict: false
     },
     {
         type: "function",

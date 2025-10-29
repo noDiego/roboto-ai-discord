@@ -231,8 +231,8 @@ class RobotoClass{
 
       generate_speech: async (args, inputData) => {
         const {input, instructions, voice} = args;
-        await this.speakTextStream(inputData, input, instructions, CONFIG.OPENAI.speechVoice ?? voice);
-        return `The audio message was generated successfully. Now, you should respond using this message so that the user can also read it: "${input}"`;
+        await this.speakTextStream(inputData, input, instructions, voice);
+        return `The audio message was generated successfully. Now, you should respond using this message so that the user can also read it: "${input.replace(/\[.*?\]\s*/g, '')}"`;
       },
 
       generate_song: async (args, inputData) => {
@@ -347,8 +347,9 @@ class RobotoClass{
     try {
       const cleanedMsg = cleanMessage(msgToSay);
       logger.debug(`Text to pronounce: ${cleanedMsg}`);
-      const ttsStream = ttsProvider == 'OPENAI' ? await this.openAI.speechStream(cleanedMsg, instructions, voice) :
-          await this._elevenLabsService.ttsStream(msgToSay, CONFIG.ELEVENLABS.speechVoice);
+      // const ttsStream = ttsProvider == 'OPENAI' ? await this.openAI.speechStream(cleanedMsg, instructions, voice) :
+      //     await this._elevenLabsService.ttsStream(msgToSay, voice ?? 'cain');
+      const ttsStream = await this._elevenLabsService.ttsStream(msgToSay, voice ?? 'cain');
       return await this.pauseAndPlay(input, ttsStream);
     } catch (error) {
       logger.error(`Error in speechStream: ${error.message}`);
