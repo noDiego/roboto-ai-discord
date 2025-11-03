@@ -37,3 +37,8 @@ export interface AIAnswer {
   type: 'text' | 'voice';
   author: string;
 }
+
+export interface OperationResult {
+  success: boolean;
+  result: any;
+}

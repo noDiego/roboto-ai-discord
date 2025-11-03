@@ -16,6 +16,7 @@ import { Readable } from "stream";
 import path from "node:path";
 import * as http from "node:http";
 import fs from "fs";
+import { AiMessage, AIRole } from "./interfaces/ai-interfaces";
 
 export function getFormattedDate(date?: Date, includeOffset = false) {
   const now = date || new Date();
@@ -415,4 +416,41 @@ export function normalizeYouTubeURL(url: string): string {
 export function commandInteractionReply(interaction: CommandInteraction, options: string | MessagePayload | InteractionEditReplyOptions | InteractionReplyOptions): Promise<Message<boolean>>{
   if(interaction.deferred) return interaction.editReply(options as any)
   return interaction.reply(options as any) as any;
+}
+
+export function sanitizeLogImages(str: string) {
+  return str.replace(/(data:image\/[a-zA-Z0-9+.-]+;base64,)[A-Za-z0-9+/=]+/g, '$1...');
+}
+
+const isTextLike = (t: string) => t === "text" || t === "ASR";
+export const hasTextOrASR = (m: AiMessage) => m.content.some(c => isTextLike(c.type));
+
+export function trimCachePreserveMessageStart(messages: any[], maxItems: number): any[] {
+  if (!Array.isArray(messages)) return messages;
+  if (messages.length > maxItems) {
+    messages.splice(0, messages.length - maxItems);
+  }
+
+  while (messages.length > 0 && messages[0].role != AIRole.USER) {
+    messages.shift();
+  }
+  return messages;
+}
+
+export function parseIfJson(input: any) {
+  if (typeof input === 'object' && input !== null) {
+    return input;
+  }
+
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
 }

@@ -9,7 +9,7 @@ import {
   downloadMp3, formatLyrics,
   getAudioStream,
   imageToBase64,
-  musicControlAction,
+  musicControlAction, parseIfJson,
   replyLongMessage,
   sleep
 } from './utils';
@@ -28,6 +28,7 @@ import { useAPIService } from "./services/useapi-service";
 import path from "node:path";
 import { ActionResult } from "./interfaces/action-result";
 import { SunoDataItem } from "./interfaces/sunoapi/suno-response";
+import fs from "node:fs";
 
 class RobotoClass{
 
@@ -105,7 +106,7 @@ class RobotoClass{
 
       const repliedMsg = await message.reply(i18n.t('responses.thinking'));
 
-      const botResponseMsg = await msgToAI(message, guildData);
+      const botResponseMsg = await msgToAI(message, guildData, null, this.openAI.hasChatCache(message.guildId));
       if(!botResponseMsg) return;
 
       return await replyLongMessage(repliedMsg, botResponseMsg.message, true);
@@ -144,8 +145,9 @@ class RobotoClass{
     }
   }
 
-
-  public async executeFunctions(functionName: string, args: any, inputData: BotInput): Promise<string>{
+  public async executeFunctions(functionName: string, functionArgs: any, inputData: BotInput): Promise<string>{
+    const args = parseIfJson(functionArgs);
+    logger.info(`[Assistant->handleFunction] Executing function: ${functionName} with args: ${JSON.stringify(args)}`);
     const handlers: Record<string, (args: any, inputData: BotInput) => Promise<string>> = {
 
       search_youtube: async (args) => {
@@ -284,6 +286,16 @@ class RobotoClass{
 
         const imageStreams = await Promise.all(
             args.imageIds.map(async (imageId: string) => {
+
+              logger.debug(`[createImage] imgId=${imageId}`);
+
+              if (imageId.startsWith("LOCAL-")) {
+                const filename = imageId.replace("LOCAL-", "") + ".jpg";
+                const filePath = path.join(__dirname, '/../assets/images/', filename);
+                logger.debug(`[createImage] filePath=${filePath}`);
+                if (!fs.existsSync(filePath)) throw new Error(`No se encontró ningún archivo local con filename=${filename}`);
+                return fs.createReadStream(filePath);
+              }
 
               const refMsg = await channel.messages.fetch(imageId)
               if (!refMsg) throw new Error(`No se encontró ningún mensaje con imageId=${imageId}`);

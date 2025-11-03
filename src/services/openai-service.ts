@@ -2,12 +2,19 @@ import OpenAI, { toFile } from 'openai';
 import { CONFIG } from '../config';
 import logger from '../logger';
 import Roboto from '../roboto';
-import { BotInput } from '../interfaces/discord-interfaces';
 import { ResponseInput, Tool } from "openai/src/resources/responses/responses";
 import { songPrompt } from "../custom";
+import { ResponseInputItem } from "openai/resources/responses/responses";
+import NodeCache from "node-cache";
+import { AIRole } from "../interfaces/ai-interfaces";
+import { sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
+import { BotInput } from "../interfaces/discord-interfaces";
+import { GuildData } from "../interfaces/guild-data";
 
 export class OpenAIService {
   private openAI: OpenAI;
+  private messagesCache = new NodeCache();
+  private readonly cacheTime = 24 * 60 * 60;
 
   constructor() {
     this.openAI = new OpenAI({
@@ -15,61 +22,97 @@ export class OpenAIService {
     });
   }
 
-  async sendChatWithTools(
+  public deleteChatCache(guildId: string){
+    this.messagesCache.del(guildId);
+  }
+
+  public addMessageToCache(item: ResponseInputItem, guildId: string){
+    const openAiMessages: ResponseInput = this.messagesCache.get(guildId) || [];
+    openAiMessages.push(item);
+    this.messagesCache.set(guildId, openAiMessages, this.cacheTime);
+  }
+
+  public hasChatCache(guildId: string): boolean {
+    return this.messagesCache.has(guildId);
+  }
+
+  public async sendMessage(openAiMessageInputList: ResponseInputItem[], systemPrompt: string, inputData: BotInput, guildData: GuildData, tools: Tool[]): Promise<string> {
+    let cycleCount = 0;
+    const maxCycles = 6;
+    const guildId = guildData.guildId;
+
+    const openAiMessages: ResponseInput = this.messagesCache.get(guildId) || [];
+    openAiMessages.push(...openAiMessageInputList)
+
+    while (cycleCount < maxCycles) {
+      const aiResponse = await this.sendToResponsesAPI(openAiMessages, 'text', tools, systemPrompt);
+
+      let hasFunctionCall = false;
+      const functionOutputs= [];
+
+      for (const output of aiResponse.output) {
+        openAiMessages.push(output);
+        if (output.type === 'function_call') {
+          hasFunctionCall = true;
+          const functionResult = await Roboto.executeFunctions(output.name, output.arguments, inputData);
+          functionOutputs.push({
+            type: "function_call_output",
+            call_id: output.call_id,
+            output: JSON.stringify({result: functionResult})
+          });
+        } else if(output.type !== 'message' && output.type !== 'reasoning' && output.type !== 'web_search_call'){
+          logger.error(`Unknown output type received from OpenAI: "${output.type}". Please report this issue.`);
+        }
+      }
+
+      openAiMessages.push(...functionOutputs);
+
+      cycleCount += 1;
+
+      if (!hasFunctionCall) {
+
+        const max = guildData.guildConfig.maxMessages ?? 30;
+        const sanitized = openAiMessages.length > max + 10 ? trimCachePreserveMessageStart(openAiMessages, max): openAiMessages;
+
+        this.messagesCache.set(guildId, sanitized, this.cacheTime);
+        return aiResponse.output_text;
+      }
+    }
+
+    throw new Error(`Reached the limit of ${maxCycles} communication cycles with OpenAI.`);
+  }
+
+  private async sendToResponsesAPI(
       messageList: ResponseInput,
-      responseType: any = 'text',
-      inputData: BotInput,
-      tools: Array<Tool>
-  ): Promise<string> {
+      responseType: 'json_object'|'text' = 'json_object',
+      tools: Array<Tool>,
+      systemPrompt?: string
+  ): Promise<OpenAI.Responses.Response> {
     logger.info(`[OpenAI] Sending ${messageList.length} messages`);
-    logger.debug(`[OpenAI] Sending Msg: ${JSON.stringify(messageList[messageList.length - 1])}`);
+    logger.debug(`[OpenAI] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
+
+    const isGpt4 = CONFIG.OPENAI.chatModel.toLowerCase().includes('gpt-4');
+
+    const hasSystemMsg = (messageList[0] as any).role == AIRole.SYSTEM;
+    if(systemPrompt) {
+      if(hasSystemMsg) messageList.shift();
+      messageList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
+    }
 
     const responseResult = await this.openAI.responses.create({
       model: CONFIG.OPENAI.chatModel,
       input: messageList,
-      text: { format: { type: responseType } },
-      reasoning: {},
+      text: { format: { type: responseType }, verbosity: isGpt4? undefined : "low" },
+      reasoning: { summary: null, effort: isGpt4? undefined : 'low' },
       tools: tools,
-      temperature: 1,
-      max_output_tokens: 2048,
-      top_p: 1,
+      // max_output_tokens: 4096,
       store: true
     });
 
-    logger.debug('[OpenAI] Completion Response:' + JSON.stringify(responseResult.output_text));
+    logger.debug(`[OpenAI] ResponsesAPI Usage: Input=${responseResult.usage.input_tokens}` + ` Cached=${responseResult.usage.input_tokens_details?.cached_tokens}` + ` Output=${responseResult.usage.output_tokens}`);
+    logger.debug('[OpenAI] ResponsesAPI Response:' + sanitizeLogImages(JSON.stringify(responseResult.output_text)));
 
-    const functionCalls = responseResult.output.filter(toolCall => toolCall.type === "function_call");
-    if (functionCalls.length === 0) return responseResult.output_text;
-
-    const updatedMessages: ResponseInput = [...messageList as any];
-
-    for (const toolCall of functionCalls) {
-      updatedMessages.push(toolCall);
-
-      const name = toolCall.name;
-      const args = JSON.parse(toolCall.arguments);
-
-      logger.debug(`[OpenAI] Called function "${name}".`);
-      logger.debug(`[OpenAI] Args: ${JSON.stringify(args)}`);
-
-      try {
-        const result = await Roboto.executeFunctions(name, args, inputData);
-        updatedMessages.push({
-          type: "function_call_output",
-          call_id: toolCall.call_id,
-          output: result.toString()
-        });
-      } catch (error) {
-        logger.error(`[OpenAI] Error executing function ${name}:`, error);
-        updatedMessages.push({
-          type: "function_call_output",
-          call_id: toolCall.call_id,
-          output: `Error executing function ${name}.`
-        });
-      }
-    }
-
-    return this.sendChatWithTools(updatedMessages, responseType, inputData, tools);
+    return responseResult;
   }
 
   //This function is used to prevent the bug that occurs when trying to use the built-in OpenAI tool together with many other functions

@@ -27,8 +27,6 @@ export class ElevenLabsService {
 
         let voiceId;
 
-        const voices = await this.elevenlabs.voices.search();
-
         switch (voice.toLowerCase()) {
             case 'cain':
                 voiceId = CVoices.CAIN; break;

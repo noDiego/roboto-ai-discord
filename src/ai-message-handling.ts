@@ -4,21 +4,24 @@ import { AIAnswer, AIContent, AiMessage, AIProvider, AIRole } from './interfaces
 import Roboto from './roboto';
 import { AITools } from './services/functions';
 import { BotInput } from './interfaces/discord-interfaces';
-import { extractJSON, fechaHoraChilena, getUnsupportedMessage, getUserName } from './utils';
+import { extractJSON, fechaHoraChilena, getUnsupportedMessage, getUserName, hasTextOrASR } from './utils';
 import { ResponseInput } from "openai/src/resources/responses/responses";
 import { GuildData } from "./interfaces/guild-data";
 import logger from "./logger";
 
+const lastProcessed = new Map();
+
 export async function msgToAI(inputData: CommandInteraction | Message<boolean>, guildData: GuildData, commandMessage?: string, omitPreviousMsgs = false): Promise<AIAnswer> {
 
+  const systemPrompt = generateAIPrompt(guildData.guildConfig);
   // Build the message array to send to AI
   const messageList = await buildMessageArray(inputData, guildData, commandMessage, omitPreviousMsgs);
 
   // Convert messages to OPENAI format
-  const convertedMsgList = convertIaMessagesLang(messageList, AIProvider.OPENAI, generateAIPrompt(guildData.guildConfig));
+  const convertedMsgList = convertIaMessagesLang(messageList, AIProvider.OPENAI, );
 
   // Send message to OPENAI and return response
-  const answerJSON = await Roboto.openAI.sendChatWithTools(convertedMsgList, 'text', inputData, AITools);
+  const answerJSON = await Roboto.openAI.sendMessage(convertedMsgList, systemPrompt, inputData, guildData, AITools);
   if(!answerJSON) return null;
 
   return extractJSON(answerJSON) as AIAnswer;
@@ -28,14 +31,16 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
 
   const resetCommands: string[] = ["-reset", "-r", "/reset"];
   const channel : TextBasedChannel = inputData.channel as TextBasedChannel;
+  const lastChatMsgProcessed = lastProcessed.get(guildData.guildId);
 
   /**Initialize messages array*/
   let messageList: AiMessage[] = [];
 
   /**If Omit enabled**/
-  if(omitPreviousMsgs){
-    const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: 1}) as Collection<Snowflake, Message<boolean>>;
-    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage ?? channelMessagesCollection[0].content, date: fechaHoraChilena()}], name: getUserName(inputData)});
+  if(omitPreviousMsgs && !!commandMessage){
+    const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: 2}) as Collection<Snowflake, Message<boolean>>;
+    const processedMsg = channelMessagesCollection.at(0).author.bot ? channelMessagesCollection.at(1) : channelMessagesCollection.at(0);
+    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage ?? processedMsg.content, date: fechaHoraChilena()}], name: getUserName(inputData)});
     return messageList;
   }
 
@@ -49,30 +54,22 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
   }, -1);
   channelMessages = resetIndex >= 0 ? channelMessages.slice(resetIndex + 1) : channelMessages;
 
+  if(channelMessages[channelMessages.length-1].author.bot) channelMessages.pop();
 
   /**Organize messages to match AI expected structure**/
   for(const channelMsg of channelMessages.reverse()){
 
-    try{
-      const attachment = channelMsg.attachments.first();
-      const isImage = attachment && attachment.contentType?.includes('image');
+    if (lastChatMsgProcessed == channelMsg.id ) break;
+    if (omitPreviousMsgs && channelMsg.author.bot) break;
+    if (inputData.createdTimestamp < channelMsg.createdTimestamp) continue;
 
-      const rol = (!channelMsg.author.bot || isImage) ? AIRole.USER : AIRole.ASSISTANT;
-      const name = getUserName(channelMsg);
+    const cmsg = convertWspMsgToAiMsg(channelMsg);
+    if(!cmsg) continue;
 
-      if((channelMsg.content == '') && !isImage) continue;
-
-      const content: Array<AIContent> = [];
-      if(isImage) content.push({type: 'image',  value: attachment.url, media_type: <string> attachment.contentType, image_id: channelMsg.id, date: fechaHoraChilena(channelMsg.createdAt)});
-      if(channelMsg.content.length > 0) content.push({ type: 'text', value: channelMsg.content, date: fechaHoraChilena(channelMsg.createdAt) });
-      if(content.length == 0) continue;
-
-      messageList.push({role: rol, content: content, name: name});
-    }catch(e){
-      logger.error(e.message);
-      messageList.push({role: AIRole.USER, name:'User', content: [{type: 'text', value: `<Error Reading Message>`, date: fechaHoraChilena(channelMsg.createdAt)}]});
-    }
+    messageList.push(cmsg);
   }
+
+  lastProcessed.set(guildData.guildId, inputData.id);
 
   messageList = messageList.reverse();
 
@@ -85,12 +82,36 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
   return messageList;
 }
 
-function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, systemPrompt: string): ResponseInput{
+function convertWspMsgToAiMsg(channelMsg: Message<boolean>): AiMessage {
+  try{
+    const attachment = channelMsg.attachments.first();
+    const isImage = attachment && attachment.contentType?.includes('image');
+
+    const rol = (!channelMsg.author.bot || isImage) ? AIRole.USER : AIRole.ASSISTANT;
+    const name = getUserName(channelMsg);
+
+    if((channelMsg.content == '') && !isImage) return {role: null, content: null, name: null};
+
+    const content: Array<AIContent> = [];
+    if(isImage) content.push({type: 'image',  value: attachment.url, media_type: <string> attachment.contentType, image_id: channelMsg.id, date: fechaHoraChilena(channelMsg.createdAt)});
+    if(channelMsg.content.length > 0) content.push({ type: 'text', value: channelMsg.content, date: fechaHoraChilena(channelMsg.createdAt) });
+    if(content.length == 0) return {role: null, content: null, name: null};
+
+    return {role: rol, content: content, name: name};
+  }catch(e){
+    logger.error(e.message);
+    return {role: AIRole.USER, name:'User', content: [{type: 'text', value: `<Error Reading Message>`, date: fechaHoraChilena(channelMsg.createdAt)}]};
+  }
+}
+
+function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider): ResponseInput{
   switch (lang){
     case AIProvider.OPENAI:
       const chatgptMessageList: ResponseInput = [];
       messageList.forEach(msg => {
         const gptContent: Array<any> = [];
+        const hasText = hasTextOrASR(msg);
+
         msg.content.forEach(c => {
           const msgContent = c.value?.replace(`<@${CONFIG.botClientID}>`,CONFIG.botName);
           const fromBot = msg.role == AIRole.ASSISTANT;
@@ -99,21 +120,22 @@ function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, syste
             text: JSON.stringify({message: msgContent, author: msg.name, type: c.type, imageId: c.image_id, date: c.date, response_format:'json_object'}) });
           if (['image'].includes(c.type)){
             gptContent.push({ type: 'input_image', image_url: c.value });
-            gptContent.push({
-              type: fromBot ? 'output_text' : 'input_text',
-              text: JSON.stringify({
-                image_id: c.image_id,
-                author: msg.name,
-                note: 'refer to this image by its image_id',
-                date: c.date
-              })
-            });
+            if(!hasText) {
+              gptContent.push({
+                type: fromBot ? 'output_text' : 'input_text',
+                text: JSON.stringify({
+                  image_id: c.image_id,
+                  author: 'SYSTEM',
+                  note: 'SYSTEM: this message is only to include the msg_id of the attached file/image. Do not mention msg_id in the chat',
+                  date: c.date
+                })
+              });
+            }
           }
         })
         chatgptMessageList.push({content: gptContent, role: msg.role});
       })
 
-      chatgptMessageList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
       return chatgptMessageList;
 
     case AIProvider.DEEPINFRA: //Unused
@@ -135,8 +157,6 @@ function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, syste
           otherMsgList.push({content: gptContent, role: msg.role});
         }
       })
-
-      otherMsgList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
 
       return otherMsgList;
 
