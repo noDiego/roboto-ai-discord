@@ -24,7 +24,7 @@ export async function msgToAI(inputData: CommandInteraction | Message<boolean>, 
   const answerJSON = await Roboto.openAI.sendMessage(convertedMsgList, systemPrompt, inputData, guildData, AITools);
   if(!answerJSON) return null;
 
-  return extractJSON(answerJSON) as AIAnswer;
+  return extractJSON(answerJSON, guildData.guildConfig.botName) as AIAnswer;
 }
 
 async function buildMessageArray(inputData: BotInput, guildData: GuildData, commandMessage?: string, omitPreviousMsgs = false): Promise<AiMessage[]>{
@@ -64,7 +64,7 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
     if (inputData.createdTimestamp < channelMsg.createdTimestamp) continue;
 
     const cmsg = convertWspMsgToAiMsg(channelMsg);
-    if(!cmsg) continue;
+    if(!cmsg || !cmsg.role) continue;
 
     messageList.push(cmsg);
   }
