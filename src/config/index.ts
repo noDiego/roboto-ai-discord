@@ -2,11 +2,15 @@ import i18n from '../locales';
 import { getLanguageName } from "../utils";
 import { join } from 'path';
 import { GuildConfiguration } from "./guild-configurations";
+import { CommandInteraction, Message } from "discord.js";
+import Roboto from "../roboto";
 
 require('dotenv').config();
 
 
-export function generateAIPrompt(guildConfig: GuildConfiguration): string {
+export function generateAIPrompt(guildConfig: GuildConfiguration, inputData: CommandInteraction | Message<boolean>): string {
+  const connectedMembers = Roboto.discordService.getAllConnectedMembers(inputData.guild);
+
   return `You are a friendly and extroverted Discord bot. Your name is ${guildConfig.botName}\n and you are in a server called "${guildConfig.name}"`+
   `- The current date is ${new Date().toLocaleDateString()}. `+
   `- **Default Language**: Preferably all your answers will be in ${getLanguageName()}. Unless the user requests another language\n`+
@@ -24,7 +28,20 @@ export function generateAIPrompt(guildConfig: GuildConfiguration): string {
       '- When you ask the model to generate or edit images of any persona, do NOT mention their names. Instead, refer to them as "the person in the first reference image" and "the person in the second reference image" (or similar), so that the API uses only the input images to know who they are.':
       '- Image creation has been disabled by the administrators'}
   `+
-  `${guildConfig.promptInfo?`- **The following is specific information for the group or individuals you are interacting with: "${guildConfig.promptInfo}"`:``}`
+  `
+  - **${buildConnectedMembersString(connectedMembers)}
+`+
+  `
+${guildConfig.promptInfo?`- **The following is specific information for the group or individuals you are interacting with: "${guildConfig.promptInfo}"`:``}`
+}
+
+function buildConnectedMembersString(connectedMembers: {name: string, channel: string}[]){
+  if(connectedMembers?.length == 0) return ``;
+  let result = `Currently connected members:`;
+  connectedMembers.forEach((member) => {
+    result = `${result}\n-${member.name} (Channel: ${member.channel})`;
+  })
+  return result;
 }
 
 export const CONFIG = {

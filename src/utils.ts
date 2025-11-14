@@ -509,11 +509,13 @@ export const hasTextOrASR = (m: AiMessage) => {
 
 export function trimCachePreserveMessageStart(messages: any[], maxItems: number): any[] {
   if (!Array.isArray(messages)) return messages;
-  if (messages.length > maxItems) {
-    messages.splice(0, messages.length - maxItems);
-  }
 
-  while (messages.length > 0 && messages[0].role != AIRole.USER) {
+  if (countMessages(messages) > maxItems) {
+    messages.splice(0, messages.length - maxItems);
+  } else
+    return messages;
+
+  while (messages.length > 0 && messages[0].role != AIRole.USER && messages[0].role != AIRole.SYSTEM) {
     messages.shift();
   }
   return messages;
@@ -535,4 +537,9 @@ export function parseIfJson(input: any) {
     }
   }
   return null;
+}
+
+export function countMessages(aiMessageList: any): number {
+  if(!aiMessageList || aiMessageList.length === 0) return 0;
+  return aiMessageList.filter((i: any) => i.role === AIRole.USER || i.role === AIRole.SYSTEM || i.role === AIRole.ASSISTANT).length;
 }

@@ -9,11 +9,11 @@ import { ResponseInput } from "openai/src/resources/responses/responses";
 import { GuildData } from "./interfaces/guild-data";
 import logger from "./logger";
 
-const lastProcessed = new Map();
+export const lastProcessed = new Map();
 
 export async function msgToAI(inputData: CommandInteraction | Message<boolean>, guildData: GuildData, commandMessage?: string, omitPreviousMsgs = false): Promise<AIAnswer> {
 
-  const systemPrompt = generateAIPrompt(guildData.guildConfig);
+  const systemPrompt = generateAIPrompt(guildData.guildConfig, inputData);
   // Build the message array to send to AI
   const messageList = await buildMessageArray(inputData, guildData, commandMessage, omitPreviousMsgs);
 
@@ -31,7 +31,7 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
 
   const resetCommands: string[] = ["-reset", "-r", "/reset"];
   const channel : TextBasedChannel = inputData.channel as TextBasedChannel;
-  const lastChatMsgProcessed = lastProcessed.get(guildData.guildId);
+  const lastChatMsgProcessed = lastProcessed.get(guildData.guildId+inputData.channelId);
 
   /**Initialize messages array*/
   let messageList: AiMessage[] = [];
@@ -69,7 +69,7 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
     messageList.push(cmsg);
   }
 
-  lastProcessed.set(guildData.guildId, inputData.id);
+  lastProcessed.set(guildData.guildId+inputData.channelId, inputData.id);
 
   messageList = messageList.reverse();
 

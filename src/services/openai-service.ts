@@ -22,18 +22,18 @@ export class OpenAIService {
     });
   }
 
-  public deleteChatCache(guildId: string){
-    this.messagesCache.del(guildId);
+  public deleteChatCache(id: string){
+    this.messagesCache.del(id);
   }
 
-  public addMessageToCache(item: ResponseInputItem, guildId: string){
-    const openAiMessages: ResponseInput = this.messagesCache.get(guildId) || [];
+  public addMessageToCache(item: ResponseInputItem, id: string){
+    const openAiMessages: ResponseInput = this.messagesCache.get(id) || [];
     openAiMessages.push(item);
-    this.messagesCache.set(guildId, openAiMessages, this.cacheTime);
+    this.messagesCache.set(id, openAiMessages, this.cacheTime);
   }
 
-  public hasChatCache(guildId: string): boolean {
-    return this.messagesCache.has(guildId);
+  public hasChatCache(id: string): boolean {
+    return this.messagesCache.has(id);
   }
 
   public async sendMessage(openAiMessageInputList: ResponseInputItem[], systemPrompt: string, inputData: BotInput, guildData: GuildData, tools: Tool[]): Promise<string> {
@@ -41,11 +41,11 @@ export class OpenAIService {
     const maxCycles = 6;
     const guildId = guildData.guildId;
 
-    const openAiMessages: ResponseInput = this.messagesCache.get(guildId) || [];
+    const openAiMessages: ResponseInput = this.messagesCache.get(inputData.guildId+inputData.channelId) || [];
     openAiMessages.push(...openAiMessageInputList)
 
     while (cycleCount < maxCycles) {
-      const aiResponse = await this.sendToResponsesAPI(openAiMessages, 'text', tools, systemPrompt);
+      const aiResponse = await this.sendToResponsesAPI(openAiMessages, 'text', tools, systemPrompt, inputData.channelId);
 
       let hasFunctionCall = false;
       const functionOutputs= [];
@@ -72,9 +72,9 @@ export class OpenAIService {
       if (!hasFunctionCall) {
 
         const max = guildData.guildConfig.maxMessages ?? 30;
-        const sanitized = openAiMessages.length > max + 10 ? trimCachePreserveMessageStart(openAiMessages, max): openAiMessages;
+        const sanitized = trimCachePreserveMessageStart(openAiMessages, max);
 
-        this.messagesCache.set(guildId, sanitized, this.cacheTime);
+        this.messagesCache.set(inputData.guildId+inputData.channelId, sanitized, this.cacheTime);
         return aiResponse.output_text;
       }
     }
@@ -86,7 +86,8 @@ export class OpenAIService {
       messageList: ResponseInput,
       responseType: 'json_object'|'text' = 'json_object',
       tools: Array<Tool>,
-      systemPrompt?: string
+      systemPrompt?: string,
+      cacheKey?: string
   ): Promise<OpenAI.Responses.Response> {
     logger.info(`[OpenAI] Sending ${messageList.length} messages`);
     logger.debug(`[OpenAI] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
@@ -105,6 +106,7 @@ export class OpenAIService {
       text: { format: { type: responseType }, verbosity: isGpt4? undefined : "low" },
       reasoning: { summary: null, effort: isGpt4? undefined : 'low' },
       tools: tools,
+      prompt_cache_key: cacheKey,
       // max_output_tokens: 4096,
       store: true
     });

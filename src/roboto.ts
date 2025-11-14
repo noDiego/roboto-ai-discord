@@ -106,7 +106,7 @@ class RobotoClass{
 
       const repliedMsg = await message.reply(i18n.t('responses.thinking'));
 
-      const botResponseMsg = await msgToAI(message, guildData, null, this.openAI.hasChatCache(message.guildId));
+      const botResponseMsg = await msgToAI(message, guildData, null, this.openAI.hasChatCache(message.guildId+message.channelId));
       if(!botResponseMsg) return;
 
       return await replyLongMessage(repliedMsg, botResponseMsg.message, true);

@@ -1,4 +1,4 @@
-import { Guild, GuildMember } from 'discord.js';
+import { ChannelType, Guild, GuildMember } from 'discord.js';
 import {
   AudioPlayer,
   createAudioPlayer,
@@ -106,6 +106,19 @@ export class DiscordService {
     });
 
     return connection;
+  }
+
+  public getAllConnectedMembers(guild: Guild){
+    const voiceChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice);
+    const allVoiceMembers: {name: string, channel: string}[] = [];
+    for (const [channelId, voiceChannel] of voiceChannels) {
+      if (voiceChannel.members.size > 0) {
+        voiceChannel.members.forEach(member => {
+          allVoiceMembers.push({name: member.nickname ?? member.displayName, channel: voiceChannel.name});
+        });
+      }
+    }
+    return allVoiceMembers;
   }
 
   private timeoutVoice() {
