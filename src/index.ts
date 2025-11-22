@@ -14,7 +14,7 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates],
 });
 
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   logger.info("Discord bot is ready!");
   await deployCommands({ guildId: process.env.TEST_GUILD_ID!}); //TODO: REMOVE
 });
