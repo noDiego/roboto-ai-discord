@@ -2,24 +2,31 @@ import { Tool } from "openai/src/resources/responses/responses";
 
 export const AITools: Array<Tool> = [
     {
-        type: "function",
-        name: "web_search",
-        description: "Use this function whenever the user asks to find out, search for, or obtain updated information or internet data.",
-        strict: true,
-        parameters: {
-            type: "object",
-            required: [
-                "query"
-            ],
-            properties: {
-                query: {
-                    type: "string",
-                    description: "Search term to perform the internet search"
-                }
-            },
-            additionalProperties: false
-        }
+        type: "web_search",
+        user_location: {
+            type: "approximate"
+        },
+        search_context_size: "medium"
     },
+    // {
+    //     type: "function",
+    //     name: "web_search",
+    //     description: "Use this function whenever the user asks to find out, search for, or obtain updated information or internet data.",
+    //     strict: true,
+    //     parameters: {
+    //         type: "object",
+    //         required: [
+    //             "query"
+    //         ],
+    //         properties: {
+    //             query: {
+    //                 type: "string",
+    //                 description: "Search term to perform the internet search"
+    //             }
+    //         },
+    //         additionalProperties: false
+    //     }
+    // },
     {
         type: "function",
         name: "search_youtube",
