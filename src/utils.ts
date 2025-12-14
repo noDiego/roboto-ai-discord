@@ -543,3 +543,5 @@ export function countMessages(aiMessageList: any): number {
   if(!aiMessageList || aiMessageList.length === 0) return 0;
   return aiMessageList.filter((i: any) => i.role === AIRole.USER || i.role === AIRole.SYSTEM || i.role === AIRole.ASSISTANT).length;
 }
+
+

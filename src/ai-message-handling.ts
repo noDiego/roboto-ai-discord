@@ -4,12 +4,20 @@ import { AIAnswer, AIContent, AiMessage, AIProvider, AIRole } from './interfaces
 import Roboto from './roboto';
 import { AITools } from './services/functions';
 import { BotInput } from './interfaces/discord-interfaces';
-import { extractJSON, fechaHoraChilena, getUnsupportedMessage, getUserName, hasTextOrASR } from './utils';
+import {
+  extractJSON,
+  fechaHoraChilena,
+  getUnsupportedMessage,
+  getUserName,
+  hasTextOrASR
+} from './utils';
 import { ResponseInput } from "openai/src/resources/responses/responses";
 import { GuildData } from "./interfaces/guild-data";
 import logger from "./logger";
+import NodeCache from "node-cache";
 
 export const lastProcessed = new Map();
+export const imagesCache = new NodeCache();
 
 export async function msgToAI(inputData: CommandInteraction | Message<boolean>, guildData: GuildData, commandMessage?: string, omitPreviousMsgs = false): Promise<AIAnswer> {
 
@@ -63,7 +71,7 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
     if (omitPreviousMsgs && channelMsg.author.bot) break;
     if (inputData.createdTimestamp < channelMsg.createdTimestamp) continue;
 
-    const cmsg = convertWspMsgToAiMsg(channelMsg);
+    const cmsg = await convertWspMsgToAiMsg(channelMsg);
     if(!cmsg || !cmsg.role) continue;
 
     messageList.push(cmsg);
@@ -82,7 +90,7 @@ async function buildMessageArray(inputData: BotInput, guildData: GuildData, comm
   return messageList;
 }
 
-function convertWspMsgToAiMsg(channelMsg: Message<boolean>): AiMessage {
+async function convertWspMsgToAiMsg(channelMsg: Message<boolean>): Promise<AiMessage> {
   try{
     const attachment = channelMsg.attachments.first();
     const isImage = attachment && attachment.contentType?.includes('image');
@@ -93,7 +101,11 @@ function convertWspMsgToAiMsg(channelMsg: Message<boolean>): AiMessage {
     if((channelMsg.content == '') && !isImage) return {role: null, content: null, name: null};
 
     const content: Array<AIContent> = [];
-    if(isImage) content.push({type: 'image',  value: attachment.url, media_type: <string> attachment.contentType, image_id: channelMsg.id, date: fechaHoraChilena(channelMsg.createdAt)});
+    if(isImage) {
+      const dataUrl = await imageUrlToDataUrl(attachment.url);
+      if(!dataUrl) return {role: rol, name:name, content: [{type: 'text', value: `<Error Reading Image>`, date: fechaHoraChilena(channelMsg.createdAt)}]};
+      content.push({type: 'image',  value: dataUrl, media_type: <string> attachment.contentType, image_id: channelMsg.id, date: fechaHoraChilena(channelMsg.createdAt)});
+    }
     if(channelMsg.content.length > 0) content.push({ type: 'text', value: channelMsg.content, date: fechaHoraChilena(channelMsg.createdAt) });
     if(content.length == 0) return {role: null, content: null, name: null};
 
@@ -102,6 +114,27 @@ function convertWspMsgToAiMsg(channelMsg: Message<boolean>): AiMessage {
     logger.error(e.message);
     return {role: AIRole.USER, name:'User', content: [{type: 'text', value: `<Error Reading Message>`, date: fechaHoraChilena(channelMsg.createdAt)}]};
   }
+}
+
+async function imageUrlToDataUrl(url: string): Promise<string> {
+
+  let imageData = imagesCache.get<string>(url);
+  if(imageData) return imageData;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    logger.error(`No se pudo descargar la imagen (${res.status}) ${url}`);
+    return null;
+  }
+
+  const contentType = res.headers.get("content-type") || "application/octet-stream";
+
+  const arrayBuffer = await res.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+  imageData = `data:${contentType};base64,${base64}`;
+  imagesCache.set(url, imageData);
+  return imageData;
 }
 
 function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider): ResponseInput{
