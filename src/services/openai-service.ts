@@ -342,25 +342,47 @@ export class OpenAIService {
 
     logger.info(`[OpenAI->lyricSongGeneration] Generating song with: "${prompt}"`);
 
-    const messages = structuredClone(songPrompt);
+    const maxRetries = 3;
+    const maxCharacters = 2000;
 
-    messages.push({
-      role: "user",
-      content: [
-        {
-          type: "input_text",
-          text: `Prompt para generar la canción ${title?`titulada "${title}"`:``}: ${prompt}.`
-        }
-      ]
-    })
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      logger.info(`[OpenAI->lyricSongGeneration] Attempt ${attempt} of ${maxRetries}`);
 
-    const responseResult = await this.openAI.responses.create({
-      model: 'gpt-5.1',
-      input: messages,
-      store: true
-    });
+      const messages = structuredClone(songPrompt);
 
-    return responseResult.output_text;
+      messages.push({
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: `Prompt para generar la canción ${title?`titulada "${title}"`:``}: ${prompt}.${attempt > 1 ? ` IMPORTANTE: La letra debe tener un máximo de ${maxCharacters} caracteres.` : ''}`
+          }
+        ]
+      });
+
+      const responseResult = await this.openAI.responses.create({
+        model: 'gpt-5.1',
+        input: messages,
+        store: true
+      });
+
+      const outputText = responseResult.output_text;
+      const characterCount = outputText.length;
+
+      logger.info(`[OpenAI->lyricSongGeneration] Generated ${characterCount} characters`);
+
+      if (characterCount <= maxCharacters) {
+        logger.info(`[OpenAI->lyricSongGeneration] Success on attempt ${attempt}`);
+        return outputText;
+      }
+
+      logger.warn(`[OpenAI->lyricSongGeneration] Attempt ${attempt} exceeded limit: ${characterCount}/${maxCharacters} characters`);
+
+      if (attempt === maxRetries) {
+        logger.error(`[OpenAI->lyricSongGeneration] Max retries reached. Truncating output.`);
+        return outputText.substring(0, maxCharacters);
+      }
+    }
   }
 
 
