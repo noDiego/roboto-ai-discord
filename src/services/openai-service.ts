@@ -343,7 +343,7 @@ export class OpenAIService {
     logger.info(`[OpenAI->lyricSongGeneration] Generating song with: "${prompt}"`);
 
     const maxRetries = 3;
-    const maxCharacters = 2000;
+    const maxCharacters = 1800;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       logger.info(`[OpenAI->lyricSongGeneration] Attempt ${attempt} of ${maxRetries}`);
