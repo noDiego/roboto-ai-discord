@@ -361,7 +361,7 @@ export class OpenAIService {
       });
 
       const responseResult = await this.openAI.responses.create({
-        model: 'gpt-5.2',
+        model: 'gpt-5.1',
         input: messages,
         store: false
       });

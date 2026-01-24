@@ -10,7 +10,7 @@ import {
   getAudioStream,
   imageToBase64,
   musicControlAction, parseIfJson,
-  replyLongMessage,
+  replyLongMessage, sendLongMessageToChannel,
   sleep
 } from './utils';
 import logger from './logger';
@@ -422,7 +422,7 @@ class RobotoClass{
 
     logger.info(`Reproduciendo canción creada ${streamResult.data[0].title}`);
 
-    await channel.send(`**${streamResult.data[0].title}**\n\nLetra:\n\n${formatLyrics(streamResult.data[0].prompt)}`);
+    await sendLongMessageToChannel(channel,`**${streamResult.data[0].title}**\n\nLetra:\n\n${formatLyrics(streamResult.data[0].prompt)}`);
 
     Roboto.addAndPlaySongs([{
       provider: MusicProvider.MP3,

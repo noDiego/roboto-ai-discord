@@ -94,6 +94,41 @@ function maskURL(message) {
   });
 }
 
+export async function sendLongMessageToChannel(
+    channel: GuildTextBasedChannel,
+    message: string
+): Promise<Message | null> {
+  const msg = maskURL(message ?? "");
+  const maxLength = 2000;
+
+  if (!channel || !channel.isTextBased()) {
+    throw new Error(`Channel ${channel.id} no es un canal de texto o no existe`);
+  }
+
+  const textChannel = channel as GuildTextBasedChannel;
+
+  if (msg.length <= maxLength) {
+    return await textChannel.send(msg);
+  }
+
+  let nextIndex = 0;
+  let firstMsg: Message | null = null;
+
+  while (nextIndex < msg.length) {
+    const remainingText = msg.slice(nextIndex);
+    const fragmentLength = remainingText.length > maxLength ? maxLength : remainingText.length;
+    const cutPoint = findCutPoint(remainingText, fragmentLength);
+    const fragment = remainingText.slice(0, cutPoint);
+
+    if (nextIndex === 0) firstMsg = await textChannel.send(fragment);
+    else await textChannel.send(fragment);
+
+    nextIndex += cutPoint;
+  }
+
+  return firstMsg;
+}
+
 export async function replyLongMessage(originalMsg: Message<boolean>, message: string, isEdit = false) {
   const msg = maskURL(message);
   const channel = originalMsg.channel as GuildTextBasedChannel;
