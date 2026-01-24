@@ -343,7 +343,7 @@ export class OpenAIService {
     logger.info(`[OpenAI->lyricSongGeneration] Generating song with: "${prompt}"`);
 
     const maxRetries = 3;
-    const maxCharacters = 2000;
+    const maxCharacters = 5000;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       logger.info(`[OpenAI->lyricSongGeneration] Attempt ${attempt} of ${maxRetries}`);
@@ -355,15 +355,15 @@ export class OpenAIService {
         content: [
           {
             type: "input_text",
-            text: `Prompt para generar la canción ${title?`titulada "${title}"`:``}: ${prompt}.${attempt > 1 ? ` IMPORTANTE: La letra debe tener un máximo de ${maxCharacters-200} caracteres.` : ''}`
+            text: `Prompt para generar la canción ${title?`titulada "${title}"`:``}: ${prompt}.${attempt > 1 ? ` IMPORTANTE: La letra debe tener un máximo de ${maxCharacters-500} caracteres.` : ''}`
           }
         ]
       });
 
       const responseResult = await this.openAI.responses.create({
-        model: 'gpt-5.1',
+        model: 'gpt-5.2',
         input: messages,
-        store: true
+        store: false
       });
 
       const outputText = responseResult.output_text;
