@@ -39,9 +39,15 @@ export default class YoutubeService {
       return { success: true, code: 0, data: song.title };
     } catch (error: any) {
       logger.error(`[startYTPlayback] Error: ${error}`);
-      if(error?.includes('Sign in to confirm'))
-        return { success: false, error: error, code: -100};
-      return { success: false, error: error, code: -1};
+
+      const errorMessage = typeof error === 'string'
+          ? error
+          : error?.message ?? String(error);
+
+      if (errorMessage.includes('Sign in to confirm'))
+        return { success: false, error: errorMessage, code: -100 };
+
+      return { success: false, error: errorMessage, code: -1 };
     }
   }
 
