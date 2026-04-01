@@ -61,7 +61,8 @@ export const CONFIG = {
     speechModel: process.env.OPENAI_SPEECH_MODEL! || 'gpt-4o-mini-tts',
     speechVoice: process.env.OPENAI_SPEECH_VOICE?.toLowerCase() ?? 'fable',
     imageModel: process.env.OPENAI_IMAGE_MODEL! || 'gpt-image-1',
-    imageQuality: (process.env.OPENAI_IMAGE_QUALITY! || 'medium') as any
+    imageQuality: (process.env.OPENAI_IMAGE_QUALITY! || 'medium') as any,
+    imageInputFidelity: (process.env.OPENAI_IMAGE_INPUT_FIDELITY! || 'low') as any
   },
   ELEVENLABS: {
     apiKey: process.env.ELEVENLABS_API_KEY!,

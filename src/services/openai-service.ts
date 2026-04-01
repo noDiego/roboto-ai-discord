@@ -297,7 +297,8 @@ export class OpenAIService {
       prompt,
       n: options?.n ?? 1,
       size: options?.size ?? "1024x1024",
-      quality: options?.quality ?? "low",
+      quality: CONFIG.OPENAI.imageQuality ?? "medium",
+      input_fidelity: CONFIG.OPENAI.imageInputFidelity ?? "low",
       background: options?.background ?? "auto",
       output_format: options?.output_format ?? 'jpeg',
       moderation: 'low'
