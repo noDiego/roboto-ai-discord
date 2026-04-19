@@ -230,7 +230,7 @@ export const AITools: Array<Tool> = [
     {
         type: "function",
         name: "generate_song",
-        description: "Generate a new song based on a given prompt, styles.",
+        description: "Generate a new song based on a given lyrics, styles.",
         parameters: {
             type: "object",
             properties: {
@@ -238,9 +238,9 @@ export const AITools: Array<Tool> = [
                     type: "string",
                     description: "Title of the song to be generated."
                 },
-                prompt: {
+                lyrics: {
                     type: "string",
-                    description: "Prompt to be used to generate the song. You can put exactly what the user wrote"
+                    description: "Full song lyrics formatted specifically for Suno-style generation. Must include clear structure using section tags like [Intro], [Verse 1], [Chorus], [Verse 2], [Bridge], [Outro], etc. Each section should be explicitly labeled, with natural lyrical flow, consistent rhythm, and line breaks. Avoid explanations or metadata—only provide the structured lyrics ready for music generation."
                 },
                 styles: {
                     type: "array",
@@ -248,7 +248,7 @@ export const AITools: Array<Tool> = [
                     items: { type: "string" }
                 },
             },
-            required: ["title", "prompt", "styles"],
+            required: ["title", "lyrics", "styles"],
             additionalProperties: false
         },
         strict: true

@@ -238,13 +238,11 @@ class RobotoClass{
       },
 
       generate_song: async (args, inputData) => {
-        const {title, prompt, styles} = args;
+        const {title, lyrics, styles} = args;
 
-
-        const lyricGenerated = await this._openAI.lyricSongGeneration(prompt, title);
-        const lyricData = JSON.parse(lyricGenerated);
+        // const lyricGenerated = await this._openAI.lyricSongGeneration(prompt, title);
+        const lyricData = {title, lyrics};
         lyricData.lyrics = lyricData.lyrics.replace(/\(([^)]+)\)/g, '[$1]');
-        lyricData.title = lyricData.title? lyricData.title : title;
         let filteredStyles = Array.isArray(styles) ? styles.join(`, `): styles;
 
         this.createSunoSong(filteredStyles, lyricData, inputData);

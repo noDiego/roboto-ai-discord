@@ -54,7 +54,7 @@ export class SunoService {
                     style: styles,
                     customMode: true,
                     instrumental: false,
-                    model: 'V5.5',
+                    model: 'V5_5',
                     callBackUrl: 'https://api.example.com/callback'
                 };
 
@@ -103,13 +103,13 @@ export class SunoService {
 
     public async waitSongsMP3(taskId: string): Promise<ActionResult<SunoDataItem[]>> {
         const interval = 5000;
-        const timeoutMs = 300_000;
+        const timeoutMs = 600_000;
 
         let timeoutHandle: NodeJS.Timeout;
 
         const timeoutPromise = new Promise<ActionResult<SunoDataItem[]>>(resolve => {
             timeoutHandle = setTimeout(() => {
-                logger.error(`[Suno] Timeout de 5 minutos esperando MP3`);
+                logger.error(`[Suno] Timeout de 10 minutos esperando MP3`);
                 resolve({ success: false, code: -1, message: 'Timeout esperando respuesta', data: null });
             }, timeoutMs);
         });

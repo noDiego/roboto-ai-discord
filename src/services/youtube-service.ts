@@ -11,6 +11,7 @@ import { Readable } from "stream";
 import { youtube } from 'scrape-youtube';
 import ytstream from 'yt-stream';
 import { cleanFileName, normalizeYouTubeURL, sleep } from "../utils";
+import { existsSync } from "node:fs";
 
 export default class YoutubeService {
 
@@ -67,19 +68,73 @@ export default class YoutubeService {
     }
 
     if (!foundPath) {
-      // 2. Download (the .output does NOT have an extension, so add your own suffix)
-      const downloadProcess = youtubedl.exec(song.url, {
-        extractAudio: true,
-        audioQuality: 0,
-        output: tmpFile,
-        noWarnings: true,
-        callHome: false,
-        youtubeSkipDashManifest: true,
-        noCheckCertificates: true,
-      });
-      await downloadProcess;
+      try {
 
-      // 3. Identify the actual extension generated after the download
+        // En getYoutubeStream, antes del exec:
+        const cookiesPath = CONFIG.Youtube.cookies;
+        const cookiesFlag = cookiesPath && existsSync(cookiesPath) ? cookiesPath : undefined;
+
+        // 2. Download con stderr capturado
+        const downloadProcess = youtubedl.exec(song.url, {
+          extractAudio: true,
+          audioQuality: 0,
+          output: tmpFile,
+          noWarnings: true,
+          noCheckCertificates: true,
+          verbose: true, // <-- Agregar para debug
+          ...(cookiesFlag && { cookies: cookiesFlag }),
+          remoteComponent: 'ejs:github',
+          extractorArgs: 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416',
+          jsRuntimes: 'node'
+        } as any);
+
+        // Capturar stdout y stderr en tiempo real
+        const process = downloadProcess;
+
+        if (downloadProcess.stderr)
+          downloadProcess.stderr.on('data', (data: Buffer) => {
+            const msg = data.toString().trim();
+
+            // yt-dlp escribe debug info en stderr, no son errores reales
+            if (msg.includes('[debug]') || msg.includes('Deprecated Feature'))
+              logger.debug(`[yt-dlp]: ${msg}`);
+            else
+              logger.error(`[yt-dlp]: ${msg}`);
+          });
+
+        await process;
+
+      } catch (error: any) {
+        // Capturar el stderr del error del proceso hijo
+        const stderr = error?.stderr || error?.message || String(error);
+        const stdout = error?.stdout || '';
+
+        logger.error(`[YoutubeService] yt-dlp falló:`);
+        logger.error(`  STDERR: ${stderr}`);
+        logger.error(`  STDOUT: ${stdout}`);
+        logger.error(`  Exit Code: ${error?.exitCode || error?.code}`);
+
+        // Detectar errores específicos
+        if (stderr.includes('Sign in to confirm') || stderr.includes('bot')) {
+          throw new Error('Sign in to confirm your age - YouTube bot detection');
+        }
+
+        if (stderr.includes('ffmpeg') || stderr.includes('ffprobe')) {
+          throw new Error('ffmpeg no está instalado. Ejecuta: sudo apt install ffmpeg');
+        }
+
+        if (stderr.includes('Video unavailable')) {
+          throw new Error(`Video no disponible: ${song.title}`);
+        }
+
+        if (stderr.includes('Private video')) {
+          throw new Error(`Video privado: ${song.title}`);
+        }
+
+        throw new Error(`Error al descargar: ${stderr || error?.message}`);
+      }
+
+      // 3. Identificar la extensión generada
       for (const ext of YoutubeService.SUPPORTED_EXTENSIONS) {
         const testPath = `${tmpFile}.${ext}`;
         try {
@@ -92,14 +147,14 @@ export default class YoutubeService {
 
       if (!foundPath) {
         logger.error("[YoutubeService] Audio file not found after download!");
-        return {stream: null};
+        return { stream: null };
       }
 
       await sleep(300);
     }
 
     const readedFile = readFileSync(foundPath);
-    return {stream: Readable.from(readedFile)};
+    return { stream: Readable.from(readedFile) };
   }
 
   public async search(searchTerm: string, isPlaylist = false): Promise<SongInfo[]> {
@@ -128,11 +183,12 @@ export default class YoutubeService {
       skipDownload: true,
       simulate: true,
       noWarnings: true,
-      callHome: false,
-      youtubeSkipDashManifest: true,
       noCheckCertificates: true,
-      cookies: CONFIG.Youtube.cookies
-    }) as Payload;
+      cookies: CONFIG.Youtube.cookies,
+      extractorArgs: 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416',
+      remoteComponent: 'ejs:github',
+      jsRuntimes: 'node'
+    } as any) as Payload;
 
     if (playlistInfo.entries && Array.isArray(playlistInfo.entries)) {
       for (const entry of playlistInfo.entries) {
@@ -158,11 +214,12 @@ export default class YoutubeService {
       skipDownload: true,
       simulate: true,
       noWarnings: true,
-      callHome: false,
-      youtubeSkipDashManifest: true,
       noCheckCertificates: true,
-      cookies: CONFIG.Youtube.cookies
-    }) as Payload;
+      cookies: CONFIG.Youtube.cookies,
+      extractorArgs: 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416',
+      remoteComponent: 'ejs:github',
+      jsRuntimes: 'node'
+    } as any) as Payload;
 
     return [this.createSongInfo(info, url)];
   }
