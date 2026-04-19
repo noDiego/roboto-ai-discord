@@ -28,6 +28,9 @@ export function generateAIPrompt(guildConfig: GuildConfiguration, inputData: Com
       '- When you ask the model to generate or edit images of any persona, do NOT mention their names. Instead, refer to them as "the person in the first reference image" and "the person in the second reference image" (or similar), so that the API uses only the input images to know who they are.':
       '- Image creation has been disabled by the administrators'}
   `+
+      `${CONFIG.aiProvider == 'ANTHROPIC'?'When citing sources from web searches, always use Discord-compatible inline Markdown link format: ([domain.com](<https://full-url.com>)). Never use XML citation tags or any other citation format. Place the citation naturally at the end of the sentence or claim it supports.':''}
+      `
+      +
   `
   - **${buildConnectedMembersString(connectedMembers)}
 `+
@@ -53,6 +56,7 @@ export const CONFIG = {
   defaultPrompt: process.env.BOT_PROMPT,
   locale: process.env.BOT_LOCALE || 'en',
   ttsProvider: (process.env.TTS_PROVIDER || 'OPENAI') as any,
+  aiProvider: (process.env.AI_PROVIDER || 'OPENAI').toUpperCase() as 'OPENAI' | 'ANTHROPIC',
   imageCreationEnabled: process.env.IMAGE_CREATION_ENABLED?.toLowerCase() == 'true',
   mp3Folder: __dirname + "/../../assets/mp3/",
   OPENAI: {
@@ -63,6 +67,10 @@ export const CONFIG = {
     imageModel: process.env.OPENAI_IMAGE_MODEL! || 'gpt-image-1',
     imageQuality: (process.env.OPENAI_IMAGE_QUALITY! || 'medium') as any,
     imageInputFidelity: (process.env.OPENAI_IMAGE_INPUT_FIDELITY! || 'low') as any
+  },
+  ANTHROPIC: {
+    apiKey: process.env.ANTHROPIC_API_KEY!,
+    chatModel: process.env.ANTHROPIC_CHAT_MODEL || 'claude-sonnet-4-6'
   },
   ELEVENLABS: {
     apiKey: process.env.ELEVENLABS_API_KEY!,

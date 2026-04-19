@@ -3,6 +3,7 @@ import { commands } from './commands';
 import { GuildData, MusicProvider, SongInfo } from './interfaces/guild-data';
 import { BotInput, MusicAction } from './interfaces/discord-interfaces';
 import { OpenAIService } from './services/openai-service';
+import { AnthropicService } from './services/anthropic-service';
 import {
   bufferToStream,
   cleanMessage,
@@ -33,13 +34,14 @@ import fs from "node:fs";
 class RobotoClass{
 
   private _guildDataList: GuildData[] = [];
-  private _openAI: OpenAIService;
+  private _openAI: OpenAIService | AnthropicService;
   private _musicService: MusicService;
   private _discordService: DiscordService;
   private _elevenLabsService: ElevenLabsService;
 
   constructor() {
-    this._openAI = new OpenAIService();
+    this._openAI = CONFIG.aiProvider === 'ANTHROPIC' ? new AnthropicService() : new OpenAIService();
+    logger.info(`[Roboto] AI Provider: ${CONFIG.aiProvider}`);
     this._discordService = new DiscordService();
     this._musicService = new MusicService();
     this._elevenLabsService = new ElevenLabsService();
@@ -488,7 +490,7 @@ class RobotoClass{
     //channel.send({content: lyricData.lyrics, files: [attachment, attachment2]});
   }
 
-  get openAI(): OpenAIService {
+  get openAI(): OpenAIService | AnthropicService {
     return this._openAI;
   }
 

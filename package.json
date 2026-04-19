@@ -34,6 +34,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@discordjs/voice": "^1.0.0-dev.1746144804-75179fbf9",
     "@elevenlabs/elevenlabs-js": "^2.20.1",
     "@snazzah/davey": "0.1.7",
