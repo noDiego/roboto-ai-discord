@@ -38,7 +38,7 @@ export class OpenAIService {
 
   public async sendMessage(openAiMessageInputList: ResponseInputItem[], systemPrompt: string, inputData: BotInput, guildData: GuildData, tools: Tool[]): Promise<string> {
     let cycleCount = 0;
-    const maxCycles = 6;
+    const maxCycles = CONFIG.maxCycles;
     const guildId = guildData.guildId;
 
     const openAiMessages: ResponseInput = this.messagesCache.get(inputData.guildId+inputData.channelId) || [];
@@ -297,8 +297,8 @@ export class OpenAIService {
       prompt,
       n: options?.n ?? 1,
       size: options?.size ?? "1024x1024",
-      quality: CONFIG.OPENAI.imageQuality ?? "medium",
-      input_fidelity: CONFIG.OPENAI.imageInputFidelity ?? "low",
+      quality: "medium",
+      //input_fidelity: CONFIG.OPENAI.imageInputFidelity ?? "low",
       background: options?.background ?? "auto",
       output_format: options?.output_format ?? 'jpeg',
       moderation: 'low'

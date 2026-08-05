@@ -30,6 +30,8 @@ import path from "node:path";
 import { ActionResult } from "./interfaces/action-result";
 import { SunoDataItem } from "./interfaces/sunoapi/suno-response";
 import fs from "node:fs";
+import TavilySvc from './services/tavily-service';
+import PerplexitySvc from "./services/perplexity_search";
 
 class RobotoClass{
 
@@ -115,7 +117,7 @@ class RobotoClass{
 
     }catch (e){
       logger.error(e.message);
-      return message.reply({content: 'Error ☹️'});
+      return message.reply({content: 'Tuve un Error, avisenle a Jiro ):'});
     }finally {
       guildData.isBusy = false;
     }
@@ -160,12 +162,13 @@ class RobotoClass{
       },
 
       web_search: async (args) => {
-        const searchResult = await this._openAI.webSearch(args.query);
-        if (!searchResult)
-          return `No results for search: "${args.query}".`;
-        return `Search result: "${searchResult}"`;
+        try{
+        const searchResult = await PerplexitySvc.perplexitySonarSearch(args.query, args.user_location);
+        return JSON.stringify(searchResult);
+        }catch (e){
+          return `Error searching web: ${e}`;
+        }
       },
-
       play_youtube_songs: async (args, inputData) => {
         return this.addAndPlaySongs(args.songs, inputData);
       },

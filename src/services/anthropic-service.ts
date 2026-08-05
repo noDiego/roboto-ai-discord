@@ -117,7 +117,7 @@ export class AnthropicService {
     openAiTools: Tool[]
   ): Promise<string> {
     let cycleCount = 0;
-    const maxCycles = 6;
+    const maxCycles = CONFIG.maxCycles;
     const cacheKey = inputData.guildId + inputData.channelId;
 
     const cachedMessages: Anthropic.MessageParam[] = this.messagesCache.get(cacheKey) || [];

@@ -49,6 +49,7 @@ function buildConnectedMembersString(connectedMembers: {name: string, channel: s
 
 export const CONFIG = {
   appName: 'RobotoAI',
+  maxCycles: parseInt(process.env.MAX_COMMUNICATION_CYCLES ?? '6'),
   botName: process.env.BOT_NAME!,
   botClientID: process.env.BOT_CLIENT_ID!,
   botToken: process.env.BOT_TOKEN!,
@@ -59,6 +60,15 @@ export const CONFIG = {
   aiProvider: (process.env.AI_PROVIDER || 'OPENAI').toUpperCase() as 'OPENAI' | 'ANTHROPIC',
   imageCreationEnabled: process.env.IMAGE_CREATION_ENABLED?.toLowerCase() == 'true',
   mp3Folder: __dirname + "/../../assets/mp3/",
+  SearchConfig:{
+    enabled: process.env.WEB_SEARCH_ENABLED?.toLowerCase() === 'true',
+    provider: process.env.SEARCH_PROVIDER?.toUpperCase() ?? 'TAVILY',
+    tavilyApiKey: process.env.TAVILY_API_KEY,
+    searchDepth: process.env.TAVILY_SEARCH_DEPTH ?? 'basic',
+    maxResults: parseInt(process.env.TAVILY_MAX_RESULTS ?? '5'),
+    includeAnswer: process.env.TAVILY_INCLUDE_ANSWER?.toLowerCase() === 'true',
+    includeRawContent: process.env.TAVILY_INCLUDE_RAW_CONTENT?.toLowerCase() === 'true',
+  },
   OPENAI: {
     apiKey: process.env.OPENAI_API_KEY!,
     chatModel: process.env.OPENAI_CHAT_MODEL! || 'gpt-4.1-mini',
@@ -77,6 +87,9 @@ export const CONFIG = {
     speechModel: process.env.ELEVENLABS_SPEECH_MODEL! || 'eleven_multilingual_v2',
     speechVoice: process.env.ELEVENLABS_SPEECH_VOICEID! || 'N2lVS1w4EtoT3dr4eOWO'
   },
+  PERPLEXITY:{
+    apiKey: process.env.PERPLEXITY_API_KEY
+  },
   SUNO:{
     baseURL: process.env.SUNO_BASE_URL || 'https://apibox.erweima.ai',
     apiKey: process.env.SUNOAPI_KEY!
@@ -87,7 +100,8 @@ export const CONFIG = {
   Youtube: {
     tempDir: join(__dirname, '../../temp'),
     maxAgeMs: Number(process.env.YOUTUBE_MAX_AGEMS) || (4 * 60 * 60 * 1000), // 4 hours
-    cookies: process.env.YOUTUBE_COOKIES
+    cookies: process.env.YOUTUBE_COOKIES,
+    verbose: process.env.YOUTUBE_VERBOSE?.toLowerCase() === 'true'
   }
 }
 

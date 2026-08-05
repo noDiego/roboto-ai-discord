@@ -1,12 +1,36 @@
 import { Tool } from "openai/src/resources/responses/responses";
 
 export const AITools: Array<Tool> = [
+    // {
+    //     type: "web_search",
+    //     user_location: {
+    //         type: "approximate"
+    //     },
+    //     search_context_size: "low"
+    // },
     {
-        type: "web_search",
-        user_location: {
-            type: "approximate"
+        type: "function",
+        name: "web_search",
+        description: "Perform a web search using a query and user location and return results",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query to look up"
+                },
+                "user_location": {
+                    "type": "string",
+                    "description": "Geographical location of the user, such as a city or country"
+                }
+            },
+            "required": [
+                "query",
+                "user_location"
+            ],
+            "additionalProperties": false
         },
-        search_context_size: "medium"
+        strict: false
     },
     // {
     //     type: "function",

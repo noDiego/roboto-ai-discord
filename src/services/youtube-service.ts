@@ -4,13 +4,12 @@ import Roboto from '../roboto';
 import { MusicProvider, SongInfo } from '../interfaces/guild-data';
 import { BotInput } from '../interfaces/discord-interfaces';
 import { ActionResult } from '../interfaces/action-result';
-import { promises as fsPromises, promises as fs, readFileSync } from 'fs';
+import { createReadStream, promises as fsPromises, promises as fs } from 'fs';
 import youtubedl, { Payload } from "youtube-dl-exec";
 import { join } from "path";
-import { Readable } from "stream";
 import { youtube } from 'scrape-youtube';
 import ytstream from 'yt-stream';
-import { cleanFileName, normalizeYouTubeURL, sleep } from "../utils";
+import { cleanFileName, normalizeYouTubeURL } from "../utils";
 import { existsSync } from "node:fs";
 
 export default class YoutubeService {
@@ -54,20 +53,14 @@ export default class YoutubeService {
 
   private async getYoutubeStream(song: SongInfo) {
     const tmpFile = join(this.tempDir, `${cleanFileName(song.title)}`);
-    let foundPath: string | null = null;
+    let foundPath = await this.findAudioFile(tmpFile);
 
-    // 1. Check if something has already been downloaded before
-    for (const ext of YoutubeService.SUPPORTED_EXTENSIONS) {
-      const testPath = `${tmpFile}.${ext}`;
-      try {
-        await fsPromises.access(testPath, fsPromises.constants.F_OK);
-        foundPath = testPath;
-        logger.debug(`[YoutubeService] File already exists: ${testPath}`);
-        break;
-      } catch {}
-    }
+    if (foundPath)
+      logger.debug(`[YoutubeService] File already exists: ${foundPath}`);
 
     if (!foundPath) {
+      let downloadOutput = '';
+      let stderrRemainder = '';
       try {
 
         // En getYoutubeStream, antes del exec:
@@ -78,10 +71,13 @@ export default class YoutubeService {
         const downloadProcess = youtubedl.exec(song.url, {
           extractAudio: true,
           audioQuality: 0,
-          output: tmpFile,
-          noWarnings: true,
+          output: `${tmpFile}.%(ext)s`,
+          print: 'after_move:filepath',
           noCheckCertificates: true,
-          verbose: true, // <-- Agregar para debug
+          // youtube-dl-exec serializes `false` as --no-verbose, which older
+          // yt-dlp releases do not support. Omit the flag unless diagnostics
+          // were explicitly enabled.
+          ...(CONFIG.Youtube.verbose && { verbose: true }),
           ...(cookiesFlag && { cookies: cookiesFlag }),
           remoteComponent: 'ejs:github',
           extractorArgs: 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416',
@@ -91,23 +87,22 @@ export default class YoutubeService {
         // Capturar stdout y stderr en tiempo real
         const process = downloadProcess;
 
-        if (downloadProcess.stderr)
+        if (downloadProcess.stderr) {
           downloadProcess.stderr.on('data', (data: Buffer) => {
-            const msg = data.toString().trim();
-
-            // yt-dlp escribe debug info en stderr, no son errores reales
-            if (msg.includes('[debug]') || msg.includes('Deprecated Feature'))
-              logger.debug(`[yt-dlp]: ${msg}`);
-            else
-              logger.error(`[yt-dlp]: ${msg}`);
+            const lines = `${stderrRemainder}${data.toString()}`.split(/\r?\n/);
+            stderrRemainder = lines.pop() ?? '';
+            lines.forEach(line => this.logYtDlpOutput(line));
           });
+        }
 
-        await process;
+        const result = await process;
+        this.logYtDlpOutput(stderrRemainder);
+        downloadOutput = String(result.stdout ?? '');
 
       } catch (error: any) {
         // Capturar el stderr del error del proceso hijo
-        const stderr = error?.stderr || error?.message || String(error);
-        const stdout = error?.stdout || '';
+        const stderr = this.redactYtDlpUrls(String(error?.stderr || error?.message || error));
+        const stdout = this.redactYtDlpUrls(String(error?.stdout || ''));
 
         logger.error(`[YoutubeService] yt-dlp falló:`);
         logger.error(`  STDERR: ${stderr}`);
@@ -119,7 +114,7 @@ export default class YoutubeService {
           throw new Error('Sign in to confirm your age - YouTube bot detection');
         }
 
-        if (stderr.includes('ffmpeg') || stderr.includes('ffprobe')) {
+        if (/(ffmpeg|ffprobe).*(not found|no such file|not installed)|(not found|no such file|not installed).*(ffmpeg|ffprobe)/i.test(stderr)) {
           throw new Error('ffmpeg no está instalado. Ejecuta: sudo apt install ffmpeg');
         }
 
@@ -134,27 +129,86 @@ export default class YoutubeService {
         throw new Error(`Error al descargar: ${stderr || error?.message}`);
       }
 
-      // 3. Identificar la extensión generada
-      for (const ext of YoutubeService.SUPPORTED_EXTENSIONS) {
-        const testPath = `${tmpFile}.${ext}`;
-        try {
-          await fsPromises.access(testPath, fsPromises.constants.F_OK);
-          foundPath = testPath;
-          logger.debug(`[YoutubeService] Download completed: ${testPath}`);
+      // yt-dlp can change the extension during post-processing. Its own
+      // after_move path is the only authoritative final filename.
+      const printedPaths = downloadOutput
+        .split(/\r?\n/)
+        .map(path => path.trim())
+        .filter(Boolean)
+        .reverse();
+
+      foundPath = null;
+      for (const printedPath of printedPaths) {
+        if (await this.fileExists(printedPath)) {
+          foundPath = printedPath;
           break;
-        } catch {}
+        }
       }
 
+      // Keep the extension lookup as a fallback for older yt-dlp versions
+      // that do not emit after_move output.
+      foundPath ??= await this.findAudioFile(tmpFile);
+
       if (!foundPath) {
-        logger.error("[YoutubeService] Audio file not found after download!");
+        logger.error(`[YoutubeService] Audio file not found after download. yt-dlp output: ${downloadOutput.trim() || '<empty>'}`);
         return { stream: null };
       }
 
-      await sleep(300);
+      logger.debug(`[YoutubeService] Download completed: ${foundPath}`);
     }
 
-    const readedFile = readFileSync(foundPath);
-    return { stream: Readable.from(readedFile) };
+    return { stream: createReadStream(foundPath) };
+  }
+
+  private logYtDlpOutput(message: string): void {
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage) return;
+
+    const safeMessage = this.redactYtDlpUrls(trimmedMessage);
+
+    if (/\bERROR:/i.test(trimmedMessage)) {
+      logger.error(`[yt-dlp]: ${safeMessage}`);
+    } else if (/\bWARNING:|\[warning\]|deprecated feature/i.test(trimmedMessage)) {
+      logger.warn(`[yt-dlp]: ${safeMessage}`);
+    } else {
+      // yt-dlp emits normal progress, post-processing and informational
+      // output on stderr, so stderr alone does not indicate a failure.
+      logger.debug(`[yt-dlp]: ${safeMessage}`);
+    }
+  }
+
+  private redactYtDlpUrls(message: string): string {
+    return message.replace(/https?:\/\/[^\s'"]+/g, url => {
+      try {
+        const parsedUrl = new URL(url);
+        return parsedUrl.search
+          ? `${parsedUrl.origin}${parsedUrl.pathname}?<redacted>`
+          : url;
+      } catch {
+        return '<redacted-url>';
+      }
+    });
+  }
+
+  private async findAudioFile(tmpFile: string): Promise<string | null> {
+    for (const ext of YoutubeService.SUPPORTED_EXTENSIONS) {
+      const testPath = `${tmpFile}.${ext}`;
+      if (await this.fileExists(testPath)) return testPath;
+    }
+
+    // Files created by the old output template did not always have an
+    // extension. Preserve their cache compatibility while new downloads use
+    // a proper extension template above.
+    return (await this.fileExists(tmpFile)) ? tmpFile : null;
+  }
+
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fsPromises.access(filePath, fsPromises.constants.F_OK);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   public async search(searchTerm: string, isPlaylist = false): Promise<SongInfo[]> {

@@ -9,3 +9,8 @@ youtube-api-key*
 assets/*
 *.iml
 temp/*
+cookies.txt
+pm2start.json
+src/custom.ts
+.codegraph/
+guild-configurations.json

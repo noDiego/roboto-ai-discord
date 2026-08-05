@@ -74,29 +74,40 @@ export class MusicService {
 
     if(guildData.songsQueue.length == 0) return { success: false, code: -1, message: 'No songs on queue'};
 
-    const song = guildData.songsQueue.shift();
-    let result: ActionResult;
+    let lastFailure: ActionResult | null = null;
 
-    switch (song.provider){
-      case MusicProvider.YOUTUBE:
-        result = await this.youtubeService.startYTPlayback(input, song);
-        break;
-      case MusicProvider.MP3:
-        result = await startMP3Playback(input, song);
-        break;
-      case MusicProvider.CORVO:
-        result = await CorvoService.startCorvoPlayback(input, song);
-        break;
+    while (guildData.songsQueue.length > 0) {
+      const song = guildData.songsQueue.shift();
+      if (!song) continue;
+
+      let result: ActionResult = { success: false, code: -1, error: 'Unsupported music provider' };
+
+      switch (song.provider){
+        case MusicProvider.YOUTUBE:
+          result = await this.youtubeService.startYTPlayback(input, song);
+          break;
+        case MusicProvider.MP3:
+          result = await startMP3Playback(input, song);
+          break;
+        case MusicProvider.CORVO:
+          result = await CorvoService.startCorvoPlayback(input, song);
+          break;
+      }
+
+      if (!result.success) {
+        lastFailure = result;
+        logger.error(`[MusicService] Skipping "${song.title}" after playback preparation failed: ${result.error ?? result.message ?? 'Unknown error'}`);
+        continue;
+      }
+
+      await this.showMusicPlayer(input, song);
+      await this.setIdleListener(input);
+      guildData.currentSongInfo = song;
+
+      return { success: true, code: 0, replied: true, data: song };
     }
 
-    if(!result.success) this.startPlayback(input);
-
-    this.showMusicPlayer(input, song);
-    this.setIdleListener(input);
-
-    guildData.currentSongInfo = song;
-
-    return { success: true, code: 0, replied: true, data: song };
+    return lastFailure ?? { success: false, code: -1, message: 'No songs on queue' };
   }
 
   async showMusicPlayer(input: BotInput, song: SongInfo){
