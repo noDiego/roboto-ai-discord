@@ -4,11 +4,11 @@ import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
 
 export enum CVoices {
     JIRO = 'BWDzJ8HGBnd2LKnzyNZW',
-    DARKAYSER = 'fRKFt6x2n8SOmJdqrmOI',
+    DARKAYSER = 'kSv7ExgVZm6PJMseGkKu',
     CHAINER = '170l9BgOYvdt9LkK6Bkg',
-    CAIN = '5220Fg5iGnVjJUgCaPdV',
+    CAIN = 'zq4MUhutQpQKs3OA6fgF',
     AKARA = 'teMPK4uoK2JqyNAxMUnI',
-    PINERA = 'D52OSO6NuxyiTVJ2y1Qi',
+    PINERA = 'nppBs8tfCJ2smgETSuOb',
     PINOCHO = 'qcv1vSIo5ukABa4OPPm2',
     WENCHO = 'cNX4JVnC2gBtWgNynNSt',
     NOXFER = 'jlV396zr6NdomGXoB5aK',

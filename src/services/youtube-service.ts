@@ -12,6 +12,8 @@ import ytstream from 'yt-stream';
 import { cleanFileName, normalizeYouTubeURL } from "../utils";
 import { existsSync } from "node:fs";
 
+const YOUTUBE_POT_PROVIDER_ARG = 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416';
+
 export default class YoutubeService {
 
   private tempDir: string;
@@ -60,73 +62,27 @@ export default class YoutubeService {
 
     if (!foundPath) {
       let downloadOutput = '';
-      let stderrRemainder = '';
       try {
-
-        // En getYoutubeStream, antes del exec:
         const cookiesPath = CONFIG.Youtube.cookies;
         const cookiesFlag = cookiesPath && existsSync(cookiesPath) ? cookiesPath : undefined;
 
-        // 2. Download con stderr capturado
-        const downloadProcess = youtubedl.exec(song.url, {
-          extractAudio: true,
-          audioQuality: 0,
-          output: `${tmpFile}.%(ext)s`,
-          print: 'after_move:filepath',
-          noCheckCertificates: true,
-          // youtube-dl-exec serializes `false` as --no-verbose, which older
-          // yt-dlp releases do not support. Omit the flag unless diagnostics
-          // were explicitly enabled.
-          ...(CONFIG.Youtube.verbose && { verbose: true }),
-          ...(cookiesFlag && { cookies: cookiesFlag }),
-          remoteComponent: 'ejs:github',
-          extractorArgs: 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416',
-          jsRuntimes: 'node'
-        } as any);
+        try {
+          // In this deployment YouTube consistently rejects the default clients
+          // with a 403, while web_embedded succeeds. Keep yt-dlp's defaults as a
+          // fallback because they can expose formats unavailable to web_embedded.
+          downloadOutput = await this.downloadYoutubeAudio(song.url, tmpFile, cookiesFlag, 'web_embedded', true);
+        } catch (error: any) {
+          if (!this.isHttp403Error(error)) throw error;
 
-        // Capturar stdout y stderr en tiempo real
-        const process = downloadProcess;
+          logger.warn(
+              `[YoutubeService] El cliente web_embedded rechazó la descarga de "${song.title}" con HTTP 403. ` +
+              'Reintentando una vez con los clientes predeterminados de yt-dlp.'
+          );
 
-        if (downloadProcess.stderr) {
-          downloadProcess.stderr.on('data', (data: Buffer) => {
-            const lines = `${stderrRemainder}${data.toString()}`.split(/\r?\n/);
-            stderrRemainder = lines.pop() ?? '';
-            lines.forEach(line => this.logYtDlpOutput(line));
-          });
+          downloadOutput = await this.downloadYoutubeAudio(song.url, tmpFile, cookiesFlag);
         }
-
-        const result = await process;
-        this.logYtDlpOutput(stderrRemainder);
-        downloadOutput = String(result.stdout ?? '');
-
       } catch (error: any) {
-        // Capturar el stderr del error del proceso hijo
-        const stderr = this.redactYtDlpUrls(String(error?.stderr || error?.message || error));
-        const stdout = this.redactYtDlpUrls(String(error?.stdout || ''));
-
-        logger.error(`[YoutubeService] yt-dlp falló:`);
-        logger.error(`  STDERR: ${stderr}`);
-        logger.error(`  STDOUT: ${stdout}`);
-        logger.error(`  Exit Code: ${error?.exitCode || error?.code}`);
-
-        // Detectar errores específicos
-        if (stderr.includes('Sign in to confirm') || stderr.includes('bot')) {
-          throw new Error('Sign in to confirm your age - YouTube bot detection');
-        }
-
-        if (/(ffmpeg|ffprobe).*(not found|no such file|not installed)|(not found|no such file|not installed).*(ffmpeg|ffprobe)/i.test(stderr)) {
-          throw new Error('ffmpeg no está instalado. Ejecuta: sudo apt install ffmpeg');
-        }
-
-        if (stderr.includes('Video unavailable')) {
-          throw new Error(`Video no disponible: ${song.title}`);
-        }
-
-        if (stderr.includes('Private video')) {
-          throw new Error(`Video privado: ${song.title}`);
-        }
-
-        throw new Error(`Error al descargar: ${stderr || error?.message}`);
+        this.throwYoutubeDownloadError(error, song);
       }
 
       // yt-dlp can change the extension during post-processing. Its own
@@ -160,13 +116,92 @@ export default class YoutubeService {
     return { stream: createReadStream(foundPath) };
   }
 
-  private logYtDlpOutput(message: string): void {
+  private async downloadYoutubeAudio(
+      url: string,
+      tmpFile: string,
+      cookiesPath?: string,
+      playerClient?: 'web_embedded',
+      logHttp403AsWarning = false
+  ): Promise<string> {
+    let stderrRemainder = '';
+    const extractorArgs = playerClient
+        ? [`youtube:player_client=${playerClient}`, YOUTUBE_POT_PROVIDER_ARG]
+        : YOUTUBE_POT_PROVIDER_ARG;
+
+    const downloadProcess = youtubedl.exec(url, {
+      extractAudio: true,
+      audioQuality: 0,
+      output: `${tmpFile}.%(ext)s`,
+      print: 'after_move:filepath',
+      noCheckCertificates: true,
+      // youtube-dl-exec serializes `false` as --no-verbose, which older
+      // yt-dlp releases do not support. Omit the flag unless diagnostics
+      // were explicitly enabled.
+      ...(CONFIG.Youtube.verbose && { verbose: true }),
+      ...(cookiesPath && { cookies: cookiesPath }),
+      remoteComponent: 'ejs:github',
+      extractorArgs,
+      jsRuntimes: 'node'
+    } as any);
+
+    if (downloadProcess.stderr) {
+      downloadProcess.stderr.on('data', (data: Buffer) => {
+        const lines = `${stderrRemainder}${data.toString()}`.split(/\r?\n/);
+        stderrRemainder = lines.pop() ?? '';
+        lines.forEach(line => this.logYtDlpOutput(line, logHttp403AsWarning));
+      });
+    }
+
+    try {
+      const result = await downloadProcess;
+      return String(result.stdout ?? '');
+    } finally {
+      this.logYtDlpOutput(stderrRemainder, logHttp403AsWarning);
+    }
+  }
+
+  private isHttp403Error(error: any): boolean {
+    const errorOutput = String(error?.stderr || error?.message || error);
+    return /ERROR:\s+unable to download video data:\s+HTTP Error 403\b/i.test(errorOutput);
+  }
+
+  private throwYoutubeDownloadError(error: any, song: SongInfo): never {
+    const stderr = this.redactYtDlpUrls(String(error?.stderr || error?.message || error));
+    const stdout = this.redactYtDlpUrls(String(error?.stdout || ''));
+
+    logger.error('[YoutubeService] yt-dlp falló:');
+    logger.error(`  STDERR: ${stderr}`);
+    logger.error(`  STDOUT: ${stdout}`);
+    logger.error(`  Exit Code: ${error?.exitCode || error?.code}`);
+
+    if (/sign in to confirm (?:your age|you(?:['’]re| are) not a bot)/i.test(stderr)) {
+      throw new Error('Sign in to confirm your age - YouTube bot detection');
+    }
+
+    if (/(ffmpeg|ffprobe).*(not found|no such file|not installed)|(not found|no such file|not installed).*(ffmpeg|ffprobe)/i.test(stderr)) {
+      throw new Error('ffmpeg no está instalado. Ejecuta: sudo apt install ffmpeg');
+    }
+
+    if (stderr.includes('Video unavailable')) {
+      throw new Error(`Video no disponible: ${song.title}`);
+    }
+
+    if (stderr.includes('Private video')) {
+      throw new Error(`Video privado: ${song.title}`);
+    }
+
+    throw new Error(`Error al descargar: ${stderr || error?.message}`);
+  }
+
+  private logYtDlpOutput(message: string, logHttp403AsWarning = false): void {
     const trimmedMessage = message.trim();
     if (!trimmedMessage) return;
 
     const safeMessage = this.redactYtDlpUrls(trimmedMessage);
 
-    if (/\bERROR:/i.test(trimmedMessage)) {
+    if (logHttp403AsWarning && this.isHttp403Error({ message: trimmedMessage })) {
+      logger.warn(`[yt-dlp]: ${safeMessage}`);
+    } else if (/\bERROR:/i.test(trimmedMessage)) {
       logger.error(`[yt-dlp]: ${safeMessage}`);
     } else if (/\bWARNING:|\[warning\]|deprecated feature/i.test(trimmedMessage)) {
       logger.warn(`[yt-dlp]: ${safeMessage}`);
