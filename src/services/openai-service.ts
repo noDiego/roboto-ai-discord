@@ -11,6 +11,7 @@ import { sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import { BotInput } from "../interfaces/discord-interfaces";
 import { GuildData } from "../interfaces/guild-data";
 import { ChatService } from "./chat-service";
+import { getConversationKey } from "../conversation";
 
 export class OpenAIService implements ChatService {
   private openAI: OpenAI;
@@ -45,7 +46,7 @@ export class OpenAIService implements ChatService {
     const maxCycles = CONFIG.maxCycles;
     const guildId = guildData.guildId;
 
-    const openAiMessages: ResponseInput = this.messagesCache.get(inputData.guildId+inputData.channelId) || [];
+    const openAiMessages: ResponseInput = this.messagesCache.get(getConversationKey(inputData.guildId, inputData.channelId)) || [];
     openAiMessages.push(...openAiMessageInputList)
 
     while (cycleCount < maxCycles) {
@@ -78,7 +79,7 @@ export class OpenAIService implements ChatService {
         const max = guildData.guildConfig.maxMessages ?? 30;
         const sanitized = trimCachePreserveMessageStart(openAiMessages, max);
 
-        this.messagesCache.set(inputData.guildId+inputData.channelId, sanitized, this.cacheTime);
+        this.messagesCache.set(getConversationKey(inputData.guildId, inputData.channelId), sanitized, this.cacheTime);
         return aiResponse.output_text;
       }
     }

@@ -34,6 +34,7 @@ export const data = new SlashCommandBuilder()
             .setName("maxmessages")
             .setDescription(i18n.t("commands.config.options.maxmessages"))
             .setMinValue(1)
+            .setMaxValue(100)
             .setRequired(false)
     )
     .addStringOption(option =>

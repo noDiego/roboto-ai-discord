@@ -15,6 +15,8 @@ import { BotInput } from '../interfaces/discord-interfaces';
 import { GuildData } from '../interfaces/guild-data';
 import { AITools } from './functions';
 import { extractJSON, sanitizeLogImages } from '../utils';
+import { getConversationKey } from '../conversation';
+import { applyImageRequestBudget } from '../vision';
 
 // Base URL for the DeepSeek Responses API. Kept as a code constant on purpose:
 // this delivery does not expose a base URL override.
@@ -176,18 +178,19 @@ export class DeepSeekService implements ChatService {
   ): Promise<string> {
     let cycleCount = 0;
     const maxCycles = CONFIG.maxCycles;
-    const cacheKey = `${inputData.guildId}:${inputData.channelId}`;
+    const cacheKey = getConversationKey(inputData.guildId, inputData.channelId);
 
     // Work on a copy of the cached transcript so a failure below never
     // contaminates the previously committed cache.
     const cached: ResponseInput = this.messagesCache.get(cacheKey) || [];
     const transcript: ResponseInput = cached.map(cloneItem);
+    const currentTurnStartIndex = transcript.length;
     for (const item of openAiMessageInputList) {
       transcript.push(cloneItem(item));
     }
 
     while (cycleCount < maxCycles) {
-      const aiResponse = await this.callDeepSeek(transcript, systemPrompt);
+      const aiResponse = await this.callDeepSeek(transcript, currentTurnStartIndex, systemPrompt);
 
       let hasFunctionCall = false;
       const functionOutputs: ResponseInputItem[] = [];
@@ -218,13 +221,15 @@ export class DeepSeekService implements ChatService {
     throw new Error(`[DeepSeek] Reached the limit of ${maxCycles} communication cycles with DeepSeek.`);
   }
 
-  private async callDeepSeek(transcript: ResponseInput, systemPrompt: string): Promise<OpenAI.Responses.Response> {
-    logger.info(`[DeepSeek] Sending ${transcript.length} items`);
-    logger.debug(`[DeepSeek] Sending Msg: ${sanitizeLogImages(JSON.stringify(transcript[transcript.length - 1]))}`);
+  private async callDeepSeek(transcript: ResponseInput, currentTurnStartIndex: number, systemPrompt: string): Promise<OpenAI.Responses.Response> {
+    // Apply per-image, total-image, count and body budgets before sending, so we
+    // never dispatch a request destined to fail for size. Historical images are
+    // degraded first; the current turn keeps priority and order.
+    const budgeted = applyImageRequestBudget(transcript, currentTurnStartIndex) as ResponseInput;
 
-    const response = await this.deepSeek.responses.create({
+    const body: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
       model: CONFIG.DEEPSEEK.chatModel,
-      input: transcript,
+      input: budgeted,
       instructions: systemPrompt,
       tools: this.tools,
       text: {
@@ -236,12 +241,48 @@ export class DeepSeekService implements ChatService {
         }
       },
       reasoning: { effort: 'low' }
+    };
+
+    const bodyBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
+    logger.info(`[DeepSeek] Sending ${budgeted.length} items (~${Math.round(bodyBytes / 1024)} KiB body)`);
+    logger.debug(`[DeepSeek] Sending Msg: ${sanitizeLogImages(JSON.stringify(budgeted[budgeted.length - 1]))}`);
+
+    try {
+      const response = await this.deepSeek.responses.create(body);
+      logger.debug(`[DeepSeek] Usage: Input=${response.usage?.input_tokens} Output=${response.usage?.output_tokens}`);
+      logger.debug(`[DeepSeek] Response: ${sanitizeLogImages(JSON.stringify(response.output_text))}`);
+      return response;
+    } catch (e) {
+      if (this.isVisualBadRequest(e, budgeted)) {
+        // A 400 caused by an image we could not validate upfront: retry once with
+        // images replaced by structured markers. No other 4xx is retried.
+        const textual = this.replaceImagesWithMarkers(budgeted);
+        logger.warn('[DeepSeek] Visual request rejected; retrying once with images replaced by markers.');
+        return await this.deepSeek.responses.create({ ...body, input: textual });
+      }
+      throw e;
+    }
+  }
+
+  private isVisualBadRequest(error: any, transcript: ResponseInput): boolean {
+    if (error?.status !== 400) return false;
+    return transcript.some((item: any) =>
+      Array.isArray(item?.content) && item.content.some((c: any) => c?.type === 'input_image')
+    );
+  }
+
+  private replaceImagesWithMarkers(transcript: ResponseInput): ResponseInput {
+    return transcript.map((item: any) => {
+      if (!item || !Array.isArray(item.content)) return item;
+      return {
+        ...item,
+        content: item.content.map((c: any) =>
+          c?.type === 'input_image'
+            ? { type: 'input_text', text: JSON.stringify({ image_omitted: true, reason: 'provider_rejected_image' }) }
+            : c
+        )
+      };
     });
-
-    logger.debug(`[DeepSeek] Usage: Input=${response.usage?.input_tokens} Output=${response.usage?.output_tokens}`);
-    logger.debug(`[DeepSeek] Response: ${sanitizeLogImages(JSON.stringify(response.output_text))}`);
-
-    return response;
   }
 
   // Validates a function call before dispatching it to

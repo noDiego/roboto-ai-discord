@@ -5,6 +5,15 @@ import { CONFIG } from './index';
 
 const GUILDCONFIG_FILE = path.join(process.cwd(), 'guild-configurations.json');
 
+// Discord only allows fetching up to 100 messages per channel.messages.fetch call.
+export const MAX_DISCORD_FETCH_MESSAGES = 100;
+
+function clampMaxMessages(value: number | undefined): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return CONFIG.maxMessages;
+  return Math.min(MAX_DISCORD_FETCH_MESSAGES, Math.max(1, Math.floor(parsed)));
+}
+
 export interface GuildConfiguration {
   guildId: string;
   name: string;
@@ -77,9 +86,9 @@ class GuildConfig {
           ? CONFIG.botName
           : stored.botName,
 
-      maxMessages: !stored || isBlank(stored.maxMessages)
-          ? CONFIG.maxMessages
-          : stored.maxMessages,
+      maxMessages: clampMaxMessages(
+          !stored || isBlank(stored.maxMessages) ? CONFIG.maxMessages : stored.maxMessages
+      ),
 
       ttsProvider: !stored || isBlank(stored.ttsProvider)
           ? CONFIG.ttsProvider
@@ -122,9 +131,9 @@ class GuildConfig {
           ? options.botName!
           : currentConfig?.botName ?? CONFIG.botName,
 
-      maxMessages: hasValue(options.maxMessages)
-          ? options.maxMessages!
-          : currentConfig?.maxMessages ?? CONFIG.maxMessages,
+      maxMessages: clampMaxMessages(
+          hasValue(options.maxMessages) ? options.maxMessages! : currentConfig?.maxMessages ?? CONFIG.maxMessages
+      ),
 
       ttsProvider: hasValue(options.ttsProvider)
           ? options.ttsProvider

@@ -34,6 +34,8 @@ import { SunoDataItem } from "./interfaces/sunoapi/suno-response";
 import fs from "node:fs";
 import TavilySvc from './services/tavily-service';
 import PerplexitySvc from "./services/perplexity_search";
+import { decodeImageReference, isSupportedImageMime } from './vision';
+import { getConversationKey } from './conversation';
 
 class RobotoClass{
 
@@ -130,7 +132,7 @@ class RobotoClass{
 
       const repliedMsg = await message.reply(i18n.t('responses.thinking'));
 
-      const botResponseMsg = await msgToAI(message, guildData, null, this.chatService.hasChatCache(message.guildId+message.channelId));
+      const botResponseMsg = await msgToAI(message, guildData, null, this.chatService.hasChatCache(getConversationKey(message.guildId, message.channelId)));
       if(!botResponseMsg) return;
 
       return await replyLongMessage(repliedMsg, botResponseMsg.message, true);
@@ -321,12 +323,28 @@ class RobotoClass{
                 return fs.createReadStream(filePath);
               }
 
-              const refMsg = await channel.messages.fetch(imageId)
+              const ref = decodeImageReference(imageId);
+              if (ref) {
+                const refMsg = await channel.messages.fetch(ref.messageId);
+                if (!refMsg) throw new Error(`No se encontró ningún mensaje con imageId=${imageId}`);
+
+                const attachment = refMsg.attachments.get(ref.attachmentId);
+                if (!attachment) throw new Error(`La imagen ${imageId} no pertenece al mensaje ${ref.messageId}`);
+                if (!isSupportedImageMime(attachment.contentType)) throw new Error(`El adjunto ${imageId} no es una imagen soportada`);
+
+                const base64Image = await imageToBase64(attachment.url);
+                const buffer = Buffer.from(base64Image, 'base64');
+                return bufferToStream(buffer);
+              }
+
+              // Legacy compatibility: a plain message id selects the first eligible image.
+              const refMsg = await channel.messages.fetch(imageId);
               if (!refMsg) throw new Error(`No se encontró ningún mensaje con imageId=${imageId}`);
 
-              const attachment = refMsg.attachments.first();
-              const base64Image = await imageToBase64(attachment.url);
+              const attachment = Array.from(refMsg.attachments.values()).find(a => isSupportedImageMime(a.contentType));
+              if (!attachment) throw new Error(`No se encontró una imagen elegible en el mensaje ${imageId}`);
 
+              const base64Image = await imageToBase64(attachment.url);
               const buffer = Buffer.from(base64Image, 'base64');
               return bufferToStream(buffer);
             })

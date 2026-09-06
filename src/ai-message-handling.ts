@@ -1,199 +1,359 @@
 import { Collection, CommandInteraction, Message, Snowflake, TextBasedChannel } from 'discord.js';
 import { CONFIG, generateAIPrompt } from './config';
-import { AIAnswer, AIContent, AiMessage, AIProvider, AIRole } from './interfaces/ai-interfaces';
+import {
+  AIAnswer,
+  AIContent,
+  AiMessage,
+  AIProvider,
+  AIRole,
+  MessageImageMetadata,
+  MessageMetadata
+} from './interfaces/ai-interfaces';
 import Roboto from './roboto';
 import { AITools } from './services/functions';
 import { BotInput } from './interfaces/discord-interfaces';
 import {
   extractJSON,
   fechaHoraChilena,
-  getUnsupportedMessage,
-  getUserName,
-  hasTextOrASR
+  getUserName
 } from './utils';
 import { ResponseInput } from "openai/src/resources/responses/responses";
 import { GuildData } from "./interfaces/guild-data";
 import logger from "./logger";
-import NodeCache from "node-cache";
+import {
+  DegradeReason,
+  getMaxImageDimension,
+  isImageMime,
+  isSupportedImageMime,
+  MAX_IMAGE_BYTES,
+  MAX_IMAGE_DIMENSION,
+  encodeImageReference,
+  serializeMessageMetadata
+} from './vision';
+import { getConversationKey } from './conversation';
 
-export const lastProcessed = new Map();
-export const imagesCache = new NodeCache();
+export const lastProcessed = new Map<string, string>();
+
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+
+class ImageDownloadError extends Error {
+  constructor(public readonly reason: DegradeReason, message?: string) {
+    super(message ?? reason);
+    this.name = 'ImageDownloadError';
+  }
+}
 
 export async function msgToAI(inputData: CommandInteraction | Message<boolean>, guildData: GuildData, commandMessage?: string, omitPreviousMsgs = false): Promise<AIAnswer> {
 
   const systemPrompt = generateAIPrompt(guildData.guildConfig, inputData);
-  // Build the message array to send to AI
-  const messageList = await buildMessageArray(inputData, guildData, commandMessage, omitPreviousMsgs);
+  // Build the message array to send to AI. lastProcessed is only a candidate
+  // here and is confirmed later, after a valid provider response.
+  const { messageList, lastProcessedCandidate } = await buildMessageArray(inputData, guildData, commandMessage, omitPreviousMsgs);
 
-  // Convert messages to OPENAI format
-  const convertedMsgList = convertIaMessagesLang(messageList, AIProvider.OPENAI, );
+  // Convert messages to OPENAI/Responses format
+  const convertedMsgList = convertIaMessagesLang(messageList, AIProvider.OPENAI);
 
-  // Send message to OPENAI and return response
+  // Send message to the selected chat provider and return response
   const answerJSON = await Roboto.chatService.sendMessage(convertedMsgList, systemPrompt, inputData, guildData, AITools);
-  if(!answerJSON) return null;
+  if (!answerJSON) return null;
+
+  // Commit the checkpoint only after a valid final response and cache commit.
+  if (lastProcessedCandidate != null) {
+    lastProcessed.set(getConversationKey(guildData.guildId, inputData.channelId), lastProcessedCandidate);
+  }
 
   return extractJSON(answerJSON, guildData.guildConfig.botName) as AIAnswer;
 }
 
-async function buildMessageArray(inputData: BotInput, guildData: GuildData, commandMessage?: string, omitPreviousMsgs = false): Promise<AiMessage[]>{
+async function buildMessageArray(
+  inputData: BotInput,
+  guildData: GuildData,
+  commandMessage?: string,
+  omitPreviousMsgs = false
+): Promise<{ messageList: AiMessage[]; lastProcessedCandidate: string | null }> {
+  const key = getConversationKey(guildData.guildId, inputData.channelId);
+  const lastChatMsgProcessed = lastProcessed.get(key);
 
-  const resetCommands: string[] = ["-reset", "-r", "/reset"];
-  const channel : TextBasedChannel = inputData.channel as TextBasedChannel;
-  const lastChatMsgProcessed = lastProcessed.get(guildData.guildId+inputData.channelId);
-
-  /**Initialize messages array*/
   let messageList: AiMessage[] = [];
 
-  /**If Omit enabled**/
-  if(omitPreviousMsgs && !!commandMessage){
-    const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: 2}) as Collection<Snowflake, Message<boolean>>;
-    const processedMsg = channelMessagesCollection.at(0).author.bot ? channelMessagesCollection.at(1) : channelMessagesCollection.at(0);
-    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage ?? processedMsg.content, date: fechaHoraChilena()}], name: getUserName(inputData)});
-    return messageList;
+  if (!omitPreviousMsgs) {
+    // Full-history path (first turn): fetch and convert recent channel messages.
+    messageList = await buildHistoryMessages(inputData, guildData, lastChatMsgProcessed);
   }
 
-  /**Get list of messages in channel **/
-  const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: guildData.guildConfig.maxMessages}) as Collection<Snowflake, Message<boolean>>;
+  if (commandMessage != null && commandMessage !== '') {
+    // Slash-command path: explicit text, no attachments on the interaction.
+    const date = inputData instanceof Message ? fechaHoraChilena(inputData.createdAt) : fechaHoraChilena();
+    messageList.push(makeTextMessage(commandMessage, getUserName(inputData), date));
+  } else if (omitPreviousMsgs) {
+    // Cached path for a Message input: convert the current message directly with
+    // the same text+attachments pipeline; do not rebuild a synthetic text-only message.
+    const current = await convertWspMsgToAiMsg(inputData as Message<boolean>);
+    if (current) messageList.push(current);
+  }
+
+  // Remove a trailing assistant message if the list has more than one entry.
+  if (messageList.length > 1 && messageList[messageList.length - 1].role === AIRole.ASSISTANT) {
+    messageList.pop();
+  }
+
+  applyDimensionBudget(messageList);
+
+  return { messageList, lastProcessedCandidate: inputData.id ?? null };
+}
+
+async function buildHistoryMessages(
+  inputData: BotInput,
+  guildData: GuildData,
+  lastProcessedId: string | undefined
+): Promise<AiMessage[]> {
+  const resetCommands: string[] = ["-reset", "-r", "/reset"];
+  const channel: TextBasedChannel = inputData.channel as TextBasedChannel;
+
+  const fetchLimit = Math.min(guildData.guildConfig.maxMessages ?? CONFIG.maxMessages, 100);
+  const channelMessagesCollection: Collection<string, Message<boolean>> = await channel.messages.fetch({ limit: fetchLimit }) as Collection<Snowflake, Message<boolean>>;
   let channelMessages = Array.from(channelMessagesCollection.values()).reverse();
 
-  /**Consider only messages after -reset command**/
+  // Consider only messages after the last -reset command.
   const resetIndex = channelMessages.map(msg => msg.content).reduce((lastIndex, currentBody, currentIndex) => {
     return resetCommands.includes(currentBody) ? currentIndex : lastIndex;
   }, -1);
   channelMessages = resetIndex >= 0 ? channelMessages.slice(resetIndex + 1) : channelMessages;
 
-  if(channelMessages[channelMessages.length-1].author.bot) channelMessages.pop();
+  if (channelMessages.length > 0 && channelMessages[channelMessages.length - 1].author.bot) channelMessages.pop();
 
-  /**Organize messages to match AI expected structure**/
-  for(const channelMsg of channelMessages.reverse()){
+  // Skip messages already committed and messages newer than the trigger.
+  let afterLastProcessed = channelMessages;
+  if (lastProcessedId) {
+    const idx = channelMessages.findIndex(msg => msg.id === lastProcessedId);
+    if (idx >= 0) afterLastProcessed = channelMessages.slice(idx + 1);
+  }
 
-    if (lastChatMsgProcessed == channelMsg.id ) break;
-    if (omitPreviousMsgs && channelMsg.author.bot) break;
+  const result: AiMessage[] = [];
+  for (const channelMsg of afterLastProcessed) {
     if (inputData.createdTimestamp < channelMsg.createdTimestamp) continue;
-
     const cmsg = await convertWspMsgToAiMsg(channelMsg);
-    if(!cmsg || !cmsg.role) continue;
-
-    messageList.push(cmsg);
+    if (!cmsg) continue;
+    result.push(cmsg);
   }
 
-  lastProcessed.set(guildData.guildId+inputData.channelId, inputData.id);
-
-  messageList = messageList.reverse();
-
-  if (messageList.length > 1 && messageList[messageList.length - 1].role === AIRole.ASSISTANT) messageList.pop();
-
-  if (commandMessage){
-    messageList.push({role: AIRole.USER, content: [{ type: 'text', value: commandMessage, date: fechaHoraChilena() }], name: getUserName(inputData)});
-  }
-
-  return messageList;
+  return result;
 }
 
-async function convertWspMsgToAiMsg(channelMsg: Message<boolean>): Promise<AiMessage> {
-  try{
-    const attachment = channelMsg.attachments.first();
-    const isImage = attachment && attachment.contentType?.includes('image');
+async function convertWspMsgToAiMsg(channelMsg: Message<boolean>): Promise<AiMessage | null> {
+  try {
+    const author = getUserName(channelMsg);
+    const date = fechaHoraChilena(channelMsg.createdAt);
+    const text = channelMsg.content ?? '';
 
-    const rol = (!channelMsg.author.bot || isImage) ? AIRole.USER : AIRole.ASSISTANT;
-    const name = getUserName(channelMsg);
+    const attachments = Array.from(channelMsg.attachments.values());
+    const hasImageAttachment = attachments.some(a => isImageMime(a.contentType));
+    const role: AIRole = (!channelMsg.author.bot || hasImageAttachment) ? AIRole.USER : AIRole.ASSISTANT;
 
-    if((channelMsg.content == '') && !isImage) return {role: null, content: null, name: null};
+    const content: AIContent[] = [];
+    const images: MessageImageMetadata[] = [];
 
-    const content: Array<AIContent> = [];
-    if(isImage) {
-      const dataUrl = await imageUrlToDataUrl(attachment.url);
-      if(!dataUrl) return {role: rol, name:name, content: [{type: 'text', value: `<Error Reading Image>`, date: fechaHoraChilena(channelMsg.createdAt)}]};
-      content.push({type: 'image',  value: dataUrl, media_type: <string> attachment.contentType, image_id: channelMsg.id, date: fechaHoraChilena(channelMsg.createdAt)});
+    let attachmentIndex = 0;
+    for (const attachment of attachments) {
+      const index = attachmentIndex++;
+      const mime = (attachment.contentType || '').toLowerCase();
+
+      // Non-image attachments are ignored for vision (never sent).
+      if (!isImageMime(mime)) continue;
+
+      const imageId = encodeImageReference(channelMsg.id, attachment.id);
+
+      // Dimension check against the single-image maximum first.
+      if (isImageDimensionsExceeded(attachment, MAX_IMAGE_DIMENSION)) {
+        images.push({ imageId, attachmentIndex: index, reason: 'dimensions_exceeded', width: attachment.width ?? undefined, height: attachment.height ?? undefined });
+        continue;
+      }
+
+      if (!isSupportedImageMime(mime)) {
+        images.push({ imageId, attachmentIndex: index, reason: 'unsupported_type' });
+        continue;
+      }
+
+      try {
+        const { dataUrl, contentType } = await downloadImageAsDataUrl(attachment.url, attachment.size);
+        content.push({
+          type: 'image',
+          value: dataUrl,
+          media_type: contentType,
+          image_id: imageId,
+          attachment_index: index,
+          width: attachment.width ?? undefined,
+          height: attachment.height ?? undefined,
+          date
+        });
+        images.push({ imageId, attachmentIndex: index, width: attachment.width ?? undefined, height: attachment.height ?? undefined });
+      } catch (e) {
+        const reason = e instanceof ImageDownloadError ? e.reason : 'download_failed';
+        logger.error(`[Vision] Degraded image ${imageId}: ${reason}`);
+        images.push({ imageId, attachmentIndex: index, reason });
+      }
     }
-    if(channelMsg.content.length > 0) content.push({ type: 'text', value: channelMsg.content, date: fechaHoraChilena(channelMsg.createdAt) });
-    if(content.length == 0) return {role: null, content: null, name: null};
 
-    return {role: rol, content: content, name: name};
-  }catch(e){
+    if (text.length === 0 && content.length === 0 && images.length === 0) {
+      return null;
+    }
+
+    const metadata: MessageMetadata = { message: text, author: author ?? 'User', date, images };
+
+    return { role, content, name: author ?? undefined, metadata };
+  } catch (e) {
     logger.error(e.message);
-    return {role: AIRole.USER, name:'User', content: [{type: 'text', value: `<Error Reading Message>`, date: fechaHoraChilena(channelMsg.createdAt)}]};
+    return {
+      role: AIRole.USER,
+      name: 'User',
+      content: [{ type: 'text', value: `<Error Reading Message>`, date: fechaHoraChilena(channelMsg.createdAt) }],
+      metadata: { message: '<Error Reading Message>', author: 'User', date: fechaHoraChilena(channelMsg.createdAt), images: [] }
+    };
   }
 }
 
-async function imageUrlToDataUrl(url: string): Promise<string> {
-
-  let imageData = imagesCache.get<string>(url);
-  if(imageData) return imageData;
-
-  const res = await fetch(url);
-  if (!res.ok) {
-    logger.error(`No se pudo descargar la imagen (${res.status}) ${url}`);
-    return null;
-  }
-
-  const contentType = res.headers.get("content-type") || "application/octet-stream";
-
-  const arrayBuffer = await res.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
-
-  imageData = `data:${contentType};base64,${base64}`;
-  imagesCache.set(url, imageData);
-  return imageData;
+function makeTextMessage(text: string, author: string | null, date: string): AiMessage {
+  return {
+    role: AIRole.USER,
+    name: author ?? undefined,
+    content: [],
+    metadata: { message: text, author: author ?? 'User', date, images: [] }
+  };
 }
 
-function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider): ResponseInput{
-  switch (lang){
-    case AIProvider.OPENAI:
+function isImageDimensionsExceeded(attachment: any, limit: number): boolean {
+  const width = typeof attachment.width === 'number' ? attachment.width : null;
+  const height = typeof attachment.height === 'number' ? attachment.height : null;
+  if (width == null || height == null) return false;
+  return width > limit || height > limit;
+}
+
+// Applies the 15+ images -> 4096px rule once the final image count is known.
+function applyDimensionBudget(messageList: AiMessage[]): void {
+  const totalImages = messageList.reduce((sum, msg) => sum + msg.content.filter(c => c.type === 'image').length, 0);
+  const limit = getMaxImageDimension(totalImages);
+  if (limit >= MAX_IMAGE_DIMENSION) return;
+
+  for (const msg of messageList) {
+    for (let i = msg.content.length - 1; i >= 0; i--) {
+      const c = msg.content[i];
+      if (c.type !== 'image') continue;
+      if ((c.width != null && c.width > limit) || (c.height != null && c.height > limit)) {
+        msg.content.splice(i, 1);
+        const img = msg.metadata?.images.find(m => m.imageId === c.image_id);
+        if (img) img.reason = 'dimensions_exceeded';
+      }
+    }
+  }
+}
+
+async function downloadImageAsDataUrl(url: string, expectedSize?: number): Promise<{ dataUrl: string; contentType: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+
+  try {
+    let res: Response;
+    try {
+      res = await fetch(url, { signal: controller.signal });
+    } catch (e) {
+      if (controller.signal.aborted) throw new ImageDownloadError('timeout');
+      throw new ImageDownloadError('download_failed', (e as Error).message);
+    }
+
+    if (!res.ok) throw new ImageDownloadError('download_failed', `HTTP ${res.status}`);
+
+    const contentType = (res.headers.get('content-type') || '').toLowerCase().split(';')[0].trim();
+    if (!isSupportedImageMime(contentType)) throw new ImageDownloadError('unsupported_type', contentType);
+
+    const contentLength = Number(res.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) throw new ImageDownloadError('too_large');
+    if (expectedSize != null && expectedSize > MAX_IMAGE_BYTES) throw new ImageDownloadError('too_large');
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new ImageDownloadError('download_failed');
+
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MAX_IMAGE_BYTES) {
+        await reader.cancel();
+        throw new ImageDownloadError('too_large');
+      }
+      chunks.push(value);
+    }
+
+    const buffer = Buffer.concat(chunks);
+    return { dataUrl: `data:${contentType};base64,${buffer.toString('base64')}`, contentType };
+  } catch (e) {
+    if (e instanceof ImageDownloadError) throw e;
+    throw new ImageDownloadError('download_failed', (e as Error).message);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+
+function convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider): ResponseInput {
+  switch (lang) {
+    case AIProvider.OPENAI: {
       const chatgptMessageList: ResponseInput = [];
       messageList.forEach(msg => {
+        const fromBot = msg.role == AIRole.ASSISTANT;
         const gptContent: Array<any> = [];
-        const hasText = hasTextOrASR(msg);
 
-        msg.content.forEach(c => {
-          const msgContent = c.value?.replace(`<@${CONFIG.botClientID}>`,CONFIG.botName);
-          const fromBot = msg.role == AIRole.ASSISTANT;
-          if (['text', 'audio'].includes(c.type))  gptContent.push({
-            type: fromBot?'output_text':'input_text',
-            text: JSON.stringify({message: msgContent, author: msg.name, type: c.type, imageId: c.image_id, date: c.date, response_format:'json_object'}) });
-          if (['image'].includes(c.type)){
+        const metadata = { ...(msg.metadata ?? buildFallbackMetadata(msg)) };
+        if (metadata.message) metadata.message = metadata.message.replace(`<@${CONFIG.botClientID}>`, CONFIG.botName);
+
+        gptContent.push({
+          type: fromBot ? 'output_text' : 'input_text',
+          text: serializeMessageMetadata(metadata)
+        });
+
+        for (const c of msg.content) {
+          if (c.type === 'image') {
             gptContent.push({ type: 'input_image', image_url: c.value });
-            if(!hasText) {
-              gptContent.push({
-                type: fromBot ? 'output_text' : 'input_text',
-                text: JSON.stringify({
-                  image_id: c.image_id,
-                  author: 'SYSTEM',
-                  note: 'SYSTEM: this message is only to include the msg_id of the attached file/image. Do not mention msg_id in the chat',
-                  date: c.date
-                })
-              });
-            }
           }
-        })
-        chatgptMessageList.push({content: gptContent, role: msg.role});
-      })
+        }
+
+        chatgptMessageList.push({ content: gptContent, role: msg.role });
+      });
 
       return chatgptMessageList;
+    }
 
-    case AIProvider.DEEPINFRA: //Unused
+    case AIProvider.DEEPINFRA: { // Unused
       const otherMsgList: ResponseInput = [];
       messageList.forEach(msg => {
         const fromBot = msg.role == AIRole.ASSISTANT;
-        if(fromBot) {
-          const textContent = msg.content.find(c => c.type === 'text')!;
-          const content = JSON.stringify({message: textContent.value, author: msg.name, type: textContent.type, response_format: "json_object"});
-          otherMsgList.push({content: content, role: msg.role});
+        const gptContent: Array<any> = [];
+        const metadata = { ...(msg.metadata ?? buildFallbackMetadata(msg)) };
+        gptContent.push({
+          type: fromBot ? 'output_text' : 'input_text',
+          text: serializeMessageMetadata(metadata)
+        });
+        for (const c of msg.content) {
+          if (c.type === 'image') {
+            gptContent.push({ type: 'input_text', text: JSON.stringify({ unsupported_image: true }) });
+          }
         }
-        else {
-          const gptContent: Array<any> = [];
-          msg.content.forEach(c => {
-            const msgContent = c.value?.replace(`<@${CONFIG.botClientID}>`,CONFIG.botName);
-            if (['image'].includes(c.type)) gptContent.push({type: 'input_text', text: JSON.stringify({message: getUnsupportedMessage('image', ''), author: msg.name, type: c.type, response_format: "json_object"})});
-            if (['text', 'audio'].includes(c.type)) gptContent.push({type: 'input_text', text: JSON.stringify({message: msgContent, author: msg.name, type: c.type, response_format: "json_object"})});
-          })
-          otherMsgList.push({content: gptContent, role: msg.role});
-        }
-      })
+        otherMsgList.push({ content: gptContent, role: msg.role });
+      });
 
       return otherMsgList;
+    }
 
     default:
       return [];
   }
+}
+
+function buildFallbackMetadata(msg: AiMessage): MessageMetadata {
+  const text = msg.content.find(c => c.type === 'text')?.value ?? '';
+  const images: MessageImageMetadata[] = msg.content
+    .filter(c => c.type === 'image')
+    .map((c, i) => ({ imageId: c.image_id ?? `img-${i}`, attachmentIndex: c.attachment_index ?? i }));
+  return { message: text, author: msg.name ?? 'User', date: msg.content[0]?.date ?? fechaHoraChilena(), images };
 }

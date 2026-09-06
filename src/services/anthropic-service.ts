@@ -8,6 +8,7 @@ import { GuildData } from '../interfaces/guild-data';
 import { Tool } from 'openai/src/resources/responses/responses';
 import { ResponseInputItem } from 'openai/resources/responses/responses';
 import { ChatService } from './chat-service';
+import { getConversationKey } from '../conversation';
 
 function convertOpenAIToAnthropicMessages(openAiMessages: any[]): {
   system: string;
@@ -119,7 +120,7 @@ export class AnthropicService implements ChatService {
   ): Promise<string> {
     let cycleCount = 0;
     const maxCycles = CONFIG.maxCycles;
-    const cacheKey = inputData.guildId + inputData.channelId;
+    const cacheKey = getConversationKey(inputData.guildId, inputData.channelId);
 
     const cachedMessages: Anthropic.MessageParam[] = this.messagesCache.get(cacheKey) || [];
 
