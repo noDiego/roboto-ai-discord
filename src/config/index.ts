@@ -47,6 +47,16 @@ function buildConnectedMembersString(connectedMembers: {name: string, channel: s
   return result;
 }
 
+export type ChatProvider = 'OPENAI' | 'ANTHROPIC';
+
+function parseChatProvider(value: string | undefined): ChatProvider {
+  const provider = (value || 'OPENAI').trim().toUpperCase();
+  if (provider === 'OPENAI' || provider === 'ANTHROPIC') {
+    return provider;
+  }
+  throw new Error(`Invalid AI_PROVIDER "${provider}". Valid values are "OPENAI" and "ANTHROPIC".`);
+}
+
 export const CONFIG = {
   appName: 'RobotoAI',
   maxCycles: parseInt(process.env.MAX_COMMUNICATION_CYCLES ?? '6'),
@@ -57,7 +67,7 @@ export const CONFIG = {
   defaultPrompt: process.env.BOT_PROMPT,
   locale: process.env.BOT_LOCALE || 'en',
   ttsProvider: (process.env.TTS_PROVIDER || 'OPENAI') as any,
-  aiProvider: (process.env.AI_PROVIDER || 'OPENAI').toUpperCase() as 'OPENAI' | 'ANTHROPIC',
+  aiProvider: parseChatProvider(process.env.AI_PROVIDER),
   imageCreationEnabled: process.env.IMAGE_CREATION_ENABLED?.toLowerCase() == 'true',
   mp3Folder: __dirname + "/../../assets/mp3/",
   SearchConfig:{

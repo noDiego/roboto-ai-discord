@@ -7,6 +7,7 @@ import { BotInput } from '../interfaces/discord-interfaces';
 import { GuildData } from '../interfaces/guild-data';
 import { Tool } from 'openai/src/resources/responses/responses';
 import { ResponseInputItem } from 'openai/resources/responses/responses';
+import { ChatService } from './chat-service';
 
 function convertOpenAIToAnthropicMessages(openAiMessages: any[]): {
   system: string;
@@ -88,7 +89,7 @@ function hasWebSearchTool(openAiTools: Tool[]): boolean {
   return openAiTools.some(t => t.type === 'web_search');
 }
 
-export class AnthropicService {
+export class AnthropicService implements ChatService {
   private anthropic: Anthropic;
   private messagesCache = new NodeCache();
   private readonly cacheTime = 24 * 60 * 60;
@@ -220,25 +221,5 @@ export class AnthropicService {
 
     const textBlocks = response.content.filter(b => b.type === 'text') as Anthropic.TextBlock[];
     return textBlocks.map(b => b.text).join('');
-  }
-
-  async createImage(_prompt: string, _options?: any): Promise<any> {
-    throw new Error('Image generation is not supported with the Anthropic provider. Use OPENAI provider.');
-  }
-
-  async editImage(_imageStreams: any[], _prompt: string, _maskStream?: any, _options?: any): Promise<any> {
-    throw new Error('Image editing is not supported with the Anthropic provider. Use OPENAI provider.');
-  }
-
-  async speechStream(_message: string, _instructions?: string, _voice?: string, _responseFormat?: string): Promise<any> {
-    throw new Error('Speech stream is not supported with the Anthropic provider. Use OPENAI provider.');
-  }
-
-  async customMsg(_messages: any[], _options?: any): Promise<string> {
-    throw new Error('customMsg is not supported with the Anthropic provider.');
-  }
-
-  async lyricSongGeneration(_prompt: string, _title: string): Promise<string> {
-    throw new Error('Lyric generation is not supported with the Anthropic provider. Use OPENAI provider.');
   }
 }

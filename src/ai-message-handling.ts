@@ -29,7 +29,7 @@ export async function msgToAI(inputData: CommandInteraction | Message<boolean>, 
   const convertedMsgList = convertIaMessagesLang(messageList, AIProvider.OPENAI, );
 
   // Send message to OPENAI and return response
-  const answerJSON = await Roboto.openAI.sendMessage(convertedMsgList, systemPrompt, inputData, guildData, AITools);
+  const answerJSON = await Roboto.chatService.sendMessage(convertedMsgList, systemPrompt, inputData, guildData, AITools);
   if(!answerJSON) return null;
 
   return extractJSON(answerJSON, guildData.guildConfig.botName) as AIAnswer;

@@ -4,6 +4,7 @@ import { GuildData, MusicProvider, SongInfo } from './interfaces/guild-data';
 import { BotInput, MusicAction } from './interfaces/discord-interfaces';
 import { OpenAIService } from './services/openai-service';
 import { AnthropicService } from './services/anthropic-service';
+import { ChatService } from './services/chat-service';
 import {
   bufferToStream,
   cleanMessage,
@@ -36,13 +37,20 @@ import PerplexitySvc from "./services/perplexity_search";
 class RobotoClass{
 
   private _guildDataList: GuildData[] = [];
-  private _openAI: OpenAIService | AnthropicService;
+  private _chatService: ChatService;
+  private _openAIService: OpenAIService | undefined;
   private _musicService: MusicService;
   private _discordService: DiscordService;
   private _elevenLabsService: ElevenLabsService;
 
   constructor() {
-    this._openAI = CONFIG.aiProvider === 'ANTHROPIC' ? new AnthropicService() : new OpenAIService();
+    if (CONFIG.aiProvider === 'OPENAI') {
+      const openAIService = new OpenAIService();
+      this._chatService = openAIService;
+      this._openAIService = openAIService;
+    } else {
+      this._chatService = new AnthropicService();
+    }
     logger.info(`[Roboto] AI Provider: ${CONFIG.aiProvider}`);
     this._discordService = new DiscordService();
     this._musicService = new MusicService();
@@ -110,7 +118,7 @@ class RobotoClass{
 
       const repliedMsg = await message.reply(i18n.t('responses.thinking'));
 
-      const botResponseMsg = await msgToAI(message, guildData, null, this.openAI.hasChatCache(message.guildId+message.channelId));
+      const botResponseMsg = await msgToAI(message, guildData, null, this.chatService.hasChatCache(message.guildId+message.channelId));
       if(!botResponseMsg) return;
 
       return await replyLongMessage(repliedMsg, botResponseMsg.message, true);
@@ -245,7 +253,6 @@ class RobotoClass{
       generate_song: async (args, inputData) => {
         const {title, lyrics, styles} = args;
 
-        // const lyricGenerated = await this._openAI.lyricSongGeneration(prompt, title);
         const lyricData = {title, lyrics};
         lyricData.lyrics = lyricData.lyrics.replace(/\(([^)]+)\)/g, '[$1]');
         let filteredStyles = Array.isArray(styles) ? styles.join(`, `): styles;
@@ -256,7 +263,8 @@ class RobotoClass{
       },
 
       create_image: async (args) => {
-        if (!CONFIG.imageCreationEnabled) return `The image creation is disabled.`
+        const guildData = this.getGuildData(inputData.guildId);
+        if (!guildData.guildConfig.imageCreationEnabled) return `The image creation is disabled.`
 
         logger.info(`Creating image for prompt "${JSON.stringify(args.prompt)}"`)
 
@@ -271,7 +279,7 @@ class RobotoClass{
           const sfbuff = Buffer.from(imageCreation[0].b64_json, "base64");
 
           const attachment = new AttachmentBuilder(sfbuff, {name: 'image.'+args.outputFormat});
-          channel.send({files: [attachment]});
+          await channel.send({files: [attachment]});
 
           return 'Image sent successfully.';
         } catch (e) {
@@ -281,7 +289,8 @@ class RobotoClass{
       },
 
       edit_image: async (args) => {
-        if (!CONFIG.imageCreationEnabled) return `The image creation is disabled.`
+        const guildData = this.getGuildData(inputData.guildId);
+        if (!guildData.guildConfig.imageCreationEnabled) return `The image creation is disabled.`
 
         logger.info(`Editing image for prompt "${JSON.stringify(args.prompt)}"`)
 
@@ -323,7 +332,7 @@ class RobotoClass{
 
           const sfbuff = Buffer.from(edited[0].b64_json, "base64");
           const attachment = new AttachmentBuilder(sfbuff, {name: 'image.'+args.outputFormat});
-          channel.send({files: [attachment]});
+          await channel.send({files: [attachment]});
 
           return 'Image sent successfully.';
         } catch (e) {
@@ -362,9 +371,8 @@ class RobotoClass{
     try {
       const cleanedMsg = cleanMessage(msgToSay);
       logger.debug(`Text to pronounce: ${cleanedMsg}`);
-      // const ttsStream = ttsProvider == 'OPENAI' ? await this.openAI.speechStream(cleanedMsg, instructions, voice) :
-      //     await this._elevenLabsService.ttsStream(msgToSay, voice ?? 'cain');
-      const ttsStream = await this._elevenLabsService.ttsStream(msgToSay, voice ?? 'cain');
+      const ttsStream = ttsProvider == 'OPENAI' ? await this.openAI.speechStream(cleanedMsg, instructions, voice) :
+          await this._elevenLabsService.ttsStream(msgToSay, voice ?? 'cain');
       await sleep(1500);
       return await this.pauseAndPlay(input, ttsStream);
     } catch (error) {
@@ -493,8 +501,18 @@ class RobotoClass{
     //channel.send({content: lyricData.lyrics, files: [attachment, attachment2]});
   }
 
-  get openAI(): OpenAIService | AnthropicService {
-    return this._openAI;
+  get chatService(): ChatService {
+    return this._chatService;
+  }
+
+  get openAI(): OpenAIService {
+    if (!this._openAIService) {
+      if (!CONFIG.OPENAI.apiKey) {
+        throw new Error('OPENAI_API_KEY is not set. OpenAI capabilities (image generation/editing, TTS, lyrics) are unavailable with the current chat provider. Set OPENAI_API_KEY to enable them.');
+      }
+      this._openAIService = new OpenAIService();
+    }
+    return this._openAIService;
   }
 
   get discordService(): DiscordService {

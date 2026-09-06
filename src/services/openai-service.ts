@@ -10,13 +10,17 @@ import { AIRole } from "../interfaces/ai-interfaces";
 import { sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import { BotInput } from "../interfaces/discord-interfaces";
 import { GuildData } from "../interfaces/guild-data";
+import { ChatService } from "./chat-service";
 
-export class OpenAIService {
+export class OpenAIService implements ChatService {
   private openAI: OpenAI;
   private messagesCache = new NodeCache();
   private readonly cacheTime = 24 * 60 * 60;
 
   constructor() {
+    if (!CONFIG.OPENAI.apiKey) {
+      throw new Error('OPENAI_API_KEY is not set. It is required for OpenAI chat and for OpenAI capabilities (images, TTS, lyrics).');
+    }
     this.openAI = new OpenAI({
       apiKey: CONFIG.OPENAI.apiKey
     });

@@ -8,7 +8,7 @@ export const data = new SlashCommandBuilder()
 
 
 export async function execute(inputData: CommandInteraction) {
-    Roboto.openAI.deleteChatCache(inputData.guildId+inputData.channelId);
+    Roboto.chatService.deleteChatCache(inputData.guildId+inputData.channelId);
     await inputData.deleteReply();
 
 
