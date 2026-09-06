@@ -1,7 +1,7 @@
 import { Collection, CommandInteraction, Message, SlashCommandBuilder, Snowflake } from "discord.js";
 import Roboto from "../roboto";
 import { lastProcessed } from "../ai-message-handling";
-import { getConversationKey } from "../conversation";
+import { getConversationKey, resetConversationState } from "../conversation";
 
 export const data = new SlashCommandBuilder()
     .setName("reset")
@@ -11,14 +11,13 @@ export const data = new SlashCommandBuilder()
 export async function execute(inputData: CommandInteraction) {
     const key = getConversationKey(inputData.guildId, inputData.channelId);
 
-    Roboto.chatService.deleteChatCache(key);
     await inputData.deleteReply();
 
 
     const channelMessagesCollection: Collection<string, Message<boolean>> = await inputData.channel.messages.fetch({limit: 1}) as Collection<Snowflake, Message<boolean>>;
     let channelMessages = Array.from(channelMessagesCollection.values());
 
-    lastProcessed.set(key, channelMessages[0].id);
+    resetConversationState(Roboto.chatService, lastProcessed, key, channelMessages[0].id);
 
     return await inputData.followUp({content: 'Chat Reset successfully', flags: 'Ephemeral'});
 }

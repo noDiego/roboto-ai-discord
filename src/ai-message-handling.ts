@@ -2,7 +2,6 @@ import { Collection, CommandInteraction, Message, Snowflake, TextBasedChannel } 
 import { CONFIG, generateAIPrompt } from './config';
 import {
   AIAnswer,
-  AIContent,
   AiMessage,
   AIProvider,
   AIRole,
@@ -21,16 +20,16 @@ import { ResponseInput } from "openai/src/resources/responses/responses";
 import { GuildData } from "./interfaces/guild-data";
 import logger from "./logger";
 import {
+  convertAttachmentsToAiMessage,
   DegradeReason,
   getMaxImageDimension,
-  isImageMime,
   isSupportedImageMime,
   MAX_IMAGE_BYTES,
   MAX_IMAGE_DIMENSION,
-  encodeImageReference,
-  serializeMessageMetadata
+  serializeMessageMetadata,
+  VisionAttachment
 } from './vision';
-import { getConversationKey } from './conversation';
+import { commitCheckpointIfSuccessful, getConversationKey } from './conversation';
 
 export const lastProcessed = new Map<string, string>();
 
@@ -58,9 +57,12 @@ export async function msgToAI(inputData: CommandInteraction | Message<boolean>, 
   if (!answerJSON) return null;
 
   // Commit the checkpoint only after a valid final response and cache commit.
-  if (lastProcessedCandidate != null) {
-    lastProcessed.set(getConversationKey(guildData.guildId, inputData.channelId), lastProcessedCandidate);
-  }
+  commitCheckpointIfSuccessful(
+    lastProcessed,
+    getConversationKey(guildData.guildId, inputData.channelId),
+    lastProcessedCandidate,
+    answerJSON != null
+  );
 
   return extractJSON(answerJSON, guildData.guildConfig.botName) as AIAnswer;
 }
@@ -146,61 +148,22 @@ async function convertWspMsgToAiMsg(channelMsg: Message<boolean>): Promise<AiMes
     const date = fechaHoraChilena(channelMsg.createdAt);
     const text = channelMsg.content ?? '';
 
-    const attachments = Array.from(channelMsg.attachments.values());
-    const hasImageAttachment = attachments.some(a => isImageMime(a.contentType));
-    const role: AIRole = (!channelMsg.author.bot || hasImageAttachment) ? AIRole.USER : AIRole.ASSISTANT;
+    const attachments: VisionAttachment[] = Array.from(channelMsg.attachments.values()).map((a) => ({
+      id: a.id,
+      contentType: a.contentType,
+      url: a.url,
+      size: a.size,
+      width: a.width ?? null,
+      height: a.height ?? null
+    }));
 
-    const content: AIContent[] = [];
-    const images: MessageImageMetadata[] = [];
+    const result = await convertAttachmentsToAiMessage(
+      { messageId: channelMsg.id, isBot: channelMsg.author.bot, text, author, date, attachments },
+      (url, size) => downloadImageAsDataUrl(url, size)
+    );
 
-    let attachmentIndex = 0;
-    for (const attachment of attachments) {
-      const index = attachmentIndex++;
-      const mime = (attachment.contentType || '').toLowerCase();
-
-      // Non-image attachments are ignored for vision (never sent).
-      if (!isImageMime(mime)) continue;
-
-      const imageId = encodeImageReference(channelMsg.id, attachment.id);
-
-      // Dimension check against the single-image maximum first.
-      if (isImageDimensionsExceeded(attachment, MAX_IMAGE_DIMENSION)) {
-        images.push({ imageId, attachmentIndex: index, reason: 'dimensions_exceeded', width: attachment.width ?? undefined, height: attachment.height ?? undefined });
-        continue;
-      }
-
-      if (!isSupportedImageMime(mime)) {
-        images.push({ imageId, attachmentIndex: index, reason: 'unsupported_type' });
-        continue;
-      }
-
-      try {
-        const { dataUrl, contentType } = await downloadImageAsDataUrl(attachment.url, attachment.size);
-        content.push({
-          type: 'image',
-          value: dataUrl,
-          media_type: contentType,
-          image_id: imageId,
-          attachment_index: index,
-          width: attachment.width ?? undefined,
-          height: attachment.height ?? undefined,
-          date
-        });
-        images.push({ imageId, attachmentIndex: index, width: attachment.width ?? undefined, height: attachment.height ?? undefined });
-      } catch (e) {
-        const reason = e instanceof ImageDownloadError ? e.reason : 'download_failed';
-        logger.error(`[Vision] Degraded image ${imageId}: ${reason}`);
-        images.push({ imageId, attachmentIndex: index, reason });
-      }
-    }
-
-    if (text.length === 0 && content.length === 0 && images.length === 0) {
-      return null;
-    }
-
-    const metadata: MessageMetadata = { message: text, author: author ?? 'User', date, images };
-
-    return { role, content, name: author ?? undefined, metadata };
+    if (!result) return null;
+    return { role: result.role, name: result.name, content: result.content, metadata: result.metadata };
   } catch (e) {
     logger.error(e.message);
     return {
@@ -219,13 +182,6 @@ function makeTextMessage(text: string, author: string | null, date: string): AiM
     content: [],
     metadata: { message: text, author: author ?? 'User', date, images: [] }
   };
-}
-
-function isImageDimensionsExceeded(attachment: any, limit: number): boolean {
-  const width = typeof attachment.width === 'number' ? attachment.width : null;
-  const height = typeof attachment.height === 'number' ? attachment.height : null;
-  if (width == null || height == null) return false;
-  return width > limit || height > limit;
 }
 
 // Applies the 15+ images -> 4096px rule once the final image count is known.

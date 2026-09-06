@@ -47,19 +47,8 @@ function buildConnectedMembersString(connectedMembers: {name: string, channel: s
   return result;
 }
 
-export type ChatProvider = 'OPENAI' | 'ANTHROPIC' | 'DEEPSEEK';
-
-function parseChatProvider(value: string | undefined): ChatProvider {
-  const provider = (value || 'OPENAI').trim().toUpperCase();
-  switch (provider) {
-    case 'OPENAI':
-    case 'ANTHROPIC':
-    case 'DEEPSEEK':
-      return provider;
-    default:
-      throw new Error(`Invalid AI_PROVIDER "${provider}". Valid values are "OPENAI", "ANTHROPIC" and "DEEPSEEK".`);
-  }
-}
+export { ChatProvider } from '../services/chat-provider';
+import { parseChatProvider } from '../services/chat-provider';
 
 export const CONFIG = {
   appName: 'RobotoAI',

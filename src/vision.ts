@@ -1,4 +1,4 @@
-import { MessageMetadata } from './interfaces/ai-interfaces';
+import { AIContent, AIRole, MessageImageMetadata, MessageMetadata } from './interfaces/ai-interfaces';
 
 // DeepSeek vision only supports JPEG, PNG, GIF and WebP.
 export const SUPPORTED_IMAGE_MIME_TYPES: readonly string[] = [
@@ -69,6 +69,152 @@ export function decodeImageReference(reference: string): ImageReference | null {
 export function isCompositeImageReference(reference: string): boolean {
   return typeof reference === 'string' && reference.startsWith(IMAGE_REF_PREFIX);
 }
+
+// --- Attachment ingestion ----------------------------------------------------
+
+export interface VisionAttachment {
+  id: string;
+  contentType?: string | null;
+  url: string;
+  size?: number;
+  width?: number | null;
+  height?: number | null;
+}
+
+export type ImageDownloader = (url: string, size?: number) => Promise<{ dataUrl: string; contentType: string }>;
+
+export interface VisionConversionResult {
+  role: AIRole;
+  name?: string;
+  content: AIContent[];
+  metadata: MessageMetadata;
+}
+
+function isImageDimensionsExceeded(attachment: VisionAttachment, limit: number): boolean {
+  const width = typeof attachment.width === 'number' ? attachment.width : null;
+  const height = typeof attachment.height === 'number' ? attachment.height : null;
+  if (width == null || height == null) return false;
+  return width > limit || height > limit;
+}
+
+/**
+ * Pure conversion of a Discord message into an `AiMessage` with vision
+ * content. It is the shared pipeline for both the first turn and cached turns,
+ * and the single source of truth for per-attachment degradation.
+ *
+ * `download` is injected so the function can be tested without network access:
+ * it resolves to a data URL on success or rejects with `{ reason }` (a
+ * `DegradeReason`) on failure. A single failing attachment only degrades that
+ * image; text, metadata and other valid images are preserved.
+ */
+export async function convertAttachmentsToAiMessage(
+  input: {
+    messageId: string;
+    isBot: boolean;
+    text: string;
+    author: string | null;
+    date: string;
+    attachments: VisionAttachment[];
+  },
+  download: ImageDownloader
+): Promise<VisionConversionResult | null> {
+  const { messageId, isBot, text, author, date, attachments } = input;
+
+  const hasImageAttachment = attachments.some((a) => isImageMime(a.contentType));
+  // A bot message that carries an image is still emitted as `user`, because
+  // DeepSeek rejects `input_image` under `assistant`/`system`.
+  const role: AIRole = !isBot || hasImageAttachment ? AIRole.USER : AIRole.ASSISTANT;
+
+  const content: AIContent[] = [];
+  const images: MessageImageMetadata[] = [];
+
+  let attachmentIndex = 0;
+  for (const attachment of attachments) {
+    const index = attachmentIndex++;
+    const mime = (attachment.contentType || '').toLowerCase();
+
+    // Non-image attachments are ignored for vision (never sent).
+    if (!isImageMime(mime)) continue;
+
+    const imageId = encodeImageReference(messageId, attachment.id);
+
+    if (isImageDimensionsExceeded(attachment, MAX_IMAGE_DIMENSION)) {
+      images.push({
+        imageId,
+        attachmentIndex: index,
+        reason: 'dimensions_exceeded',
+        width: attachment.width ?? undefined,
+        height: attachment.height ?? undefined
+      });
+      continue;
+    }
+
+    if (!isSupportedImageMime(mime)) {
+      images.push({ imageId, attachmentIndex: index, reason: 'unsupported_type' });
+      continue;
+    }
+
+    try {
+      const { dataUrl, contentType } = await download(attachment.url, attachment.size);
+      content.push({
+        type: 'image',
+        value: dataUrl,
+        media_type: contentType,
+        image_id: imageId,
+        attachment_index: index,
+        width: attachment.width ?? undefined,
+        height: attachment.height ?? undefined,
+        date
+      });
+      images.push({
+        imageId,
+        attachmentIndex: index,
+        width: attachment.width ?? undefined,
+        height: attachment.height ?? undefined
+      });
+    } catch (e) {
+      const reason: DegradeReason = (e as any)?.reason ?? 'download_failed';
+      images.push({ imageId, attachmentIndex: index, reason });
+    }
+  }
+
+  if (text.length === 0 && content.length === 0 && images.length === 0) {
+    return null;
+  }
+
+  const metadata: MessageMetadata = { message: text, author: author ?? 'User', date, images };
+
+  return { role, name: author ?? undefined, content, metadata };
+}
+
+// --- Reference resolution ----------------------------------------------------
+
+/**
+ * Resolves an `edit_image` reference to a specific attachment id:
+ *  - a composite reference (`imgref:`) must belong to `messageId` and selects
+ *    the exact attachment;
+ *  - a legacy plain message id selects the first eligible image.
+ *
+ * Returns `null` when the reference does not resolve.
+ */
+export function selectAttachmentForReference(
+  reference: string,
+  messageId: string,
+  attachments: Array<{ id: string; contentType?: string | null }>
+): string | null {
+  if (typeof reference !== 'string') return null;
+
+  const ref = decodeImageReference(reference);
+  if (ref) {
+    if (ref.messageId !== messageId) return null;
+    const exact = attachments.find((a) => a.id === ref.attachmentId);
+    return exact ? exact.id : null;
+  }
+
+  const first = attachments.find((a) => isSupportedImageMime(a.contentType));
+  return first ? first.id : null;
+}
+
 
 // --- Metadata serialization ------------------------------------------------
 

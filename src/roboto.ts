@@ -34,7 +34,8 @@ import { SunoDataItem } from "./interfaces/sunoapi/suno-response";
 import fs from "node:fs";
 import TavilySvc from './services/tavily-service';
 import PerplexitySvc from "./services/perplexity_search";
-import { decodeImageReference, isSupportedImageMime } from './vision';
+import { decodeImageReference, isSupportedImageMime, selectAttachmentForReference } from './vision';
+import { resolveTtsProvider, sendImageFile } from './services/multimedia-helpers';
 import { getConversationKey } from './conversation';
 
 class RobotoClass{
@@ -293,9 +294,7 @@ class RobotoClass{
           const sfbuff = Buffer.from(imageCreation[0].b64_json, "base64");
 
           const attachment = new AttachmentBuilder(sfbuff, {name: 'image.'+args.outputFormat});
-          await channel.send({files: [attachment]});
-
-          return 'Image sent successfully.';
+          return await sendImageFile(() => channel.send({files: [attachment]}), (err) => logger.error((err as Error).message));
         } catch (e) {
           logger.error(e.message);
           return `Error creating image: "${e.message}"`;
@@ -324,25 +323,26 @@ class RobotoClass{
               }
 
               const ref = decodeImageReference(imageId);
-              if (ref) {
-                const refMsg = await channel.messages.fetch(ref.messageId);
-                if (!refMsg) throw new Error(`No se encontró ningún mensaje con imageId=${imageId}`);
-
-                const attachment = refMsg.attachments.get(ref.attachmentId);
-                if (!attachment) throw new Error(`La imagen ${imageId} no pertenece al mensaje ${ref.messageId}`);
-                if (!isSupportedImageMime(attachment.contentType)) throw new Error(`El adjunto ${imageId} no es una imagen soportada`);
-
-                const base64Image = await imageToBase64(attachment.url);
-                const buffer = Buffer.from(base64Image, 'base64');
-                return bufferToStream(buffer);
-              }
-
-              // Legacy compatibility: a plain message id selects the first eligible image.
-              const refMsg = await channel.messages.fetch(imageId);
+              const refMsg = await channel.messages.fetch(ref ? ref.messageId : imageId);
               if (!refMsg) throw new Error(`No se encontró ningún mensaje con imageId=${imageId}`);
 
-              const attachment = Array.from(refMsg.attachments.values()).find(a => isSupportedImageMime(a.contentType));
-              if (!attachment) throw new Error(`No se encontró una imagen elegible en el mensaje ${imageId}`);
+              const selectedId = selectAttachmentForReference(
+                imageId,
+                refMsg.id,
+                Array.from(refMsg.attachments.values()).map((a) => ({ id: a.id, contentType: a.contentType }))
+              );
+
+              const attachment = selectedId ? refMsg.attachments.get(selectedId) : null;
+              if (!attachment) {
+                throw new Error(
+                  ref
+                    ? `La imagen ${imageId} no pertenece al mensaje ${ref.messageId}`
+                    : `No se encontró una imagen elegible en el mensaje ${imageId}`
+                );
+              }
+              if (ref && !isSupportedImageMime(attachment.contentType)) {
+                throw new Error(`El adjunto ${imageId} no es una imagen soportada`);
+              }
 
               const base64Image = await imageToBase64(attachment.url);
               const buffer = Buffer.from(base64Image, 'base64');
@@ -362,9 +362,7 @@ class RobotoClass{
 
           const sfbuff = Buffer.from(edited[0].b64_json, "base64");
           const attachment = new AttachmentBuilder(sfbuff, {name: 'image.'+args.outputFormat});
-          await channel.send({files: [attachment]});
-
-          return 'Image sent successfully.';
+          return await sendImageFile(() => channel.send({files: [attachment]}), (err) => logger.error((err as Error).message));
         } catch (e) {
           logger.error(e.message);
           return `Error creating image: "${e.message}"`;
@@ -396,7 +394,7 @@ class RobotoClass{
 
   async speakTextStream(input: BotInput, msgToSay: string, instructions?: string, voice?: string) {
 
-    const ttsProvider = this.getGuildData(input.guildId).guildConfig.ttsProvider;
+    const ttsProvider = resolveTtsProvider(this.getGuildData(input.guildId).guildConfig.ttsProvider);
 
     try {
       const cleanedMsg = cleanMessage(msgToSay);

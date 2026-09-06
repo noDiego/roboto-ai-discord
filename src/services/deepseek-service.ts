@@ -1,9 +1,7 @@
 import OpenAI from 'openai';
 import NodeCache from 'node-cache';
 import Ajv, { ValidateFunction } from 'ajv';
-import { CONFIG } from '../config';
 import logger from '../logger';
-import Roboto from '../roboto';
 import {
   ResponseInput,
   ResponseInputItem,
@@ -14,9 +12,24 @@ import { ChatService } from './chat-service';
 import { BotInput } from '../interfaces/discord-interfaces';
 import { GuildData } from '../interfaces/guild-data';
 import { AITools } from './functions';
-import { extractJSON, sanitizeLogImages } from '../utils';
+import { extractJSON, sanitizeLogImages } from '../answer-json';
 import { getConversationKey } from '../conversation';
 import { applyImageRequestBudget } from '../vision';
+
+/**
+ * Function executor used to dispatch validated tool calls. It is injectable so
+ * the service can be tested without importing the `Roboto` singleton (which
+ * boots Discord and other real clients). The default lazily resolves Roboto
+ * only when a tool actually runs.
+ */
+export type ExecuteFunctions = (name: string, args: string, inputData: BotInput) => Promise<string>;
+
+function defaultExecuteFunctions(name: string, args: string, inputData: BotInput): Promise<string> {
+  // Lazy require avoids loading `roboto`/`discord.js` at import time.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const Roboto = require('../roboto').default;
+  return Roboto.executeFunctions(name, args, inputData);
+}
 
 // Base URL for the DeepSeek Responses API. Kept as a code constant on purpose:
 // this delivery does not expose a base URL override.
@@ -39,7 +52,7 @@ const AI_ANSWER_SCHEMA = {
 // that `ajv` can validate. It removes the OpenAI-only `strict`/`nullable`
 // keywords and, where `nullable: true`, widens `type` (and `enum`) to accept
 // `null`, mirroring OpenAI's semantics.
-function toStandardSchema(schema: any): any {
+export function toStandardSchema(schema: any): any {
   if (Array.isArray(schema)) {
     return schema.map(toStandardSchema);
   }
@@ -85,7 +98,7 @@ function cloneItem<T>(item: T): T {
 // Builds a DeepSeek copy of the tools: never mutates the global `AITools`
 // array and omits `strict` so the strict-beta mode is never enabled
 // accidentally for a mixed strict/non-strict tool set.
-function buildDeepSeekTools(tools: Tool[]): Tool[] {
+export function buildDeepSeekTools(tools: Tool[]): Tool[] {
   return tools.map((tool) => {
     const copy = structuredClone(tool);
     if (copy.type === 'function') {
@@ -118,7 +131,7 @@ function buildToolValidators(tools: Tool[]): Map<string, ValidateFunction> {
 // function_call_output/web_search_call) belongs to the turn that precedes it,
 // so cutting at turn boundaries keeps complete reasoning/tool blocks and never
 // leaves an orphan `function_call_output` without its `function_call`.
-function trimDeepSeekTranscript(items: ResponseInput, maxTurns: number): ResponseInput {
+export function trimDeepSeekTranscript(items: ResponseInput, maxTurns: number): ResponseInput {
   if (!Array.isArray(items) || items.length === 0) {
     return items;
   }
@@ -140,25 +153,50 @@ function trimDeepSeekTranscript(items: ResponseInput, maxTurns: number): Respons
   return items.slice(keepFrom);
 }
 
+export interface DeepSeekServiceOptions {
+  client?: OpenAI;
+  executeFunctions?: ExecuteFunctions;
+  maxCycles?: number;
+  chatModel?: string;
+  apiKey?: string;
+}
+
 export class DeepSeekService implements ChatService {
   private deepSeek: OpenAI;
   private messagesCache = new NodeCache();
   private readonly cacheTime = 24 * 60 * 60;
   private readonly tools: Tool[];
   private readonly toolValidators = new Map<string, ValidateFunction>();
+  private readonly executeFunctions: ExecuteFunctions;
+  private readonly maxCycles: number;
+  private readonly chatModel: string;
 
-  constructor() {
-    if (!CONFIG.DEEPSEEK.apiKey) {
-      throw new Error('DEEPSEEK_API_KEY is not set. It is required when AI_PROVIDER=DEEPSEEK.');
+  constructor(options: DeepSeekServiceOptions = {}) {
+    this.executeFunctions = options.executeFunctions ?? defaultExecuteFunctions;
+    this.maxCycles = options.maxCycles ?? this.readConfig().maxCycles;
+    this.chatModel = options.chatModel ?? this.readConfig().DEEPSEEK.chatModel;
+
+    if (options.client) {
+      this.deepSeek = options.client;
+    } else {
+      const apiKey = options.apiKey ?? this.readConfig().DEEPSEEK.apiKey;
+      if (!apiKey) {
+        throw new Error('DEEPSEEK_API_KEY is not set. It is required when AI_PROVIDER=DEEPSEEK.');
+      }
+      this.deepSeek = new OpenAI({
+        apiKey,
+        baseURL: DEEPSEEK_BASE_URL
+      });
     }
-
-    this.deepSeek = new OpenAI({
-      apiKey: CONFIG.DEEPSEEK.apiKey,
-      baseURL: DEEPSEEK_BASE_URL
-    });
 
     this.tools = buildDeepSeekTools(AITools);
     this.toolValidators = buildToolValidators(AITools);
+  }
+
+  private readConfig(): any {
+    // Lazy require so tests can construct the service without loading config/roboto.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('../config').CONFIG;
   }
 
   public deleteChatCache(id: string): void {
@@ -177,7 +215,7 @@ export class DeepSeekService implements ChatService {
     _tools: Tool[]
   ): Promise<string> {
     let cycleCount = 0;
-    const maxCycles = CONFIG.maxCycles;
+    const maxCycles = this.maxCycles;
     const cacheKey = getConversationKey(inputData.guildId, inputData.channelId);
 
     // Work on a copy of the cached transcript so a failure below never
@@ -214,7 +252,7 @@ export class DeepSeekService implements ChatService {
         const trimmed = trimDeepSeekTranscript(transcript, max);
         // Commit the new version only after a valid final response.
         this.messagesCache.set(cacheKey, trimmed, this.cacheTime);
-        return this.normalizeFinalAnswer(aiResponse.output_text, guildData.guildConfig.botName || CONFIG.botName);
+        return normalizeDeepSeekAnswer(aiResponse.output_text, guildData.guildConfig.botName || this.readConfig().botName);
       }
     }
 
@@ -228,7 +266,7 @@ export class DeepSeekService implements ChatService {
     const budgeted = applyImageRequestBudget(transcript, currentTurnStartIndex) as ResponseInput;
 
     const body: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
-      model: CONFIG.DEEPSEEK.chatModel,
+      model: this.chatModel,
       input: budgeted,
       instructions: systemPrompt,
       tools: this.tools,
@@ -285,14 +323,13 @@ export class DeepSeekService implements ChatService {
     });
   }
 
-  // Validates a function call before dispatching it to
-  // `Roboto.executeFunctions`. Invalid calls produce an error output and never
-  // reach side-effectful handlers.
+  // Validates a function call before dispatching it to the injected executor.
+  // Invalid calls produce an error output and never reach side-effectful handlers.
   private async executeValidatedFunction(output: any, inputData: BotInput): Promise<ResponseInputItem> {
     const validationError = this.validateFunctionArguments(output.name, output.arguments);
     const result = validationError !== null
       ? validationError
-      : await Roboto.executeFunctions(output.name, output.arguments, inputData);
+      : await this.executeFunctions(output.name, output.arguments, inputData);
 
     return {
       type: 'function_call_output',
@@ -328,29 +365,30 @@ export class DeepSeekService implements ChatService {
     return null;
   }
 
-  // Normalizes the raw `output_text` into a complete `AIAnswer`-shaped JSON
-  // string. `extractJSON` may return partial objects, so this guarantees a
-  // string `message`, an `author` (falling back to the configured name) and a
-  // valid `type`.
-  private normalizeFinalAnswer(rawText: string, botName: string): string {
-    const parsed = extractJSON(rawText, botName) as any;
+}
 
-    let message: string;
-    if (parsed?.message != null) {
-      message = typeof parsed.message === 'string' ? parsed.message : String(parsed.message);
-    } else {
-      message = (rawText ?? '').trim();
-    }
+// Normalizes the raw `output_text` into a complete `AIAnswer`-shaped JSON
+// string. `extractJSON` may return partial objects, so this guarantees a
+// string `message`, an `author` (falling back to the configured name) and a
+// valid `type`.
+export function normalizeDeepSeekAnswer(rawText: string, botName: string): string {
+  const parsed = extractJSON(rawText, botName) as any;
 
-    let author: string;
-    if (parsed?.author != null && typeof parsed.author === 'string' && parsed.author.length > 0) {
-      author = parsed.author;
-    } else {
-      author = botName;
-    }
-
-    const type = parsed?.type === 'voice' ? 'voice' : 'text';
-
-    return JSON.stringify({ message, author, type });
+  let message: string;
+  if (parsed?.message != null) {
+    message = typeof parsed.message === 'string' ? parsed.message : String(parsed.message);
+  } else {
+    message = (rawText ?? '').trim();
   }
+
+  let author: string;
+  if (parsed?.author != null && typeof parsed.author === 'string' && parsed.author.length > 0) {
+    author = parsed.author;
+  } else {
+    author = botName;
+  }
+
+  const type = parsed?.type === 'voice' ? 'voice' : 'text';
+
+  return JSON.stringify({ message, author, type });
 }
