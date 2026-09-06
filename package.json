@@ -38,6 +38,7 @@
     "@discordjs/voice": "^1.0.0-dev.1746144804-75179fbf9",
     "@elevenlabs/elevenlabs-js": "^2.20.1",
     "@snazzah/davey": "0.1.7",
+    "ajv": "^8.20.0",
     "axios": "^1.12.2",
     "discord.js": "^14.19.3",
     "dotenv": "^16.6.1",

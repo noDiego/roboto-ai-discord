@@ -47,14 +47,18 @@ function buildConnectedMembersString(connectedMembers: {name: string, channel: s
   return result;
 }
 
-export type ChatProvider = 'OPENAI' | 'ANTHROPIC';
+export type ChatProvider = 'OPENAI' | 'ANTHROPIC' | 'DEEPSEEK';
 
 function parseChatProvider(value: string | undefined): ChatProvider {
   const provider = (value || 'OPENAI').trim().toUpperCase();
-  if (provider === 'OPENAI' || provider === 'ANTHROPIC') {
-    return provider;
+  switch (provider) {
+    case 'OPENAI':
+    case 'ANTHROPIC':
+    case 'DEEPSEEK':
+      return provider;
+    default:
+      throw new Error(`Invalid AI_PROVIDER "${provider}". Valid values are "OPENAI", "ANTHROPIC" and "DEEPSEEK".`);
   }
-  throw new Error(`Invalid AI_PROVIDER "${provider}". Valid values are "OPENAI" and "ANTHROPIC".`);
 }
 
 export const CONFIG = {
@@ -91,6 +95,10 @@ export const CONFIG = {
   ANTHROPIC: {
     apiKey: process.env.ANTHROPIC_API_KEY!,
     chatModel: process.env.ANTHROPIC_CHAT_MODEL || 'claude-sonnet-4-6'
+  },
+  DEEPSEEK: {
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    chatModel: process.env.DEEPSEEK_CHAT_MODEL || 'deepseek-v4-flash-vision-exp'
   },
   ELEVENLABS: {
     apiKey: process.env.ELEVENLABS_API_KEY!,

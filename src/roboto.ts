@@ -4,6 +4,7 @@ import { GuildData, MusicProvider, SongInfo } from './interfaces/guild-data';
 import { BotInput, MusicAction } from './interfaces/discord-interfaces';
 import { OpenAIService } from './services/openai-service';
 import { AnthropicService } from './services/anthropic-service';
+import { DeepSeekService } from './services/deepseek-service';
 import { ChatService } from './services/chat-service';
 import {
   bufferToStream,
@@ -44,12 +45,23 @@ class RobotoClass{
   private _elevenLabsService: ElevenLabsService;
 
   constructor() {
-    if (CONFIG.aiProvider === 'OPENAI') {
-      const openAIService = new OpenAIService();
-      this._chatService = openAIService;
-      this._openAIService = openAIService;
-    } else {
-      this._chatService = new AnthropicService();
+    switch (CONFIG.aiProvider) {
+      case 'OPENAI': {
+        const openAIService = new OpenAIService();
+        this._chatService = openAIService;
+        this._openAIService = openAIService;
+        break;
+      }
+      case 'ANTHROPIC':
+        this._chatService = new AnthropicService();
+        break;
+      case 'DEEPSEEK':
+        this._chatService = new DeepSeekService();
+        break;
+      default: {
+        const exhaustive: never = CONFIG.aiProvider;
+        throw new Error(`Unsupported AI provider "${exhaustive}".`);
+      }
     }
     logger.info(`[Roboto] AI Provider: ${CONFIG.aiProvider}`);
     this._discordService = new DiscordService();
